@@ -26,10 +26,17 @@ let nixpkgs = import sources.nixpkgs {};
       cp ${hs-lib-hs}/include/plugins-hs/plugins-hs-export.h $out/include/plugins-hs/plugins-hs-export.h
       cp ${hs-lib-hs.src}/csrc/plugins-hs.h $out/include/plugins-hs/
 
+      ${if nixpkgs.stdenv.isDarwin then
+      ''
       cp ${hs-lib-hs}/lib/${ghc-v}/libplugins-export.* $out/lib/libplugins-export.dylib
       chmod +w $out/lib/*
       install_name_tool -id $out/lib/libplugins-export.dylib $out/lib/libplugins-export.dylib
-
+      ''
+      else
+      ''
+      cp ${hs-lib-hs}/lib/${ghc-v}/libplugins-export.* $out/lib/
+      ''
+      }
       cp -r ${ghc}/lib/${ghc-v}/include/* $out/include
       '';
 
@@ -52,6 +59,7 @@ let nixpkgs = import sources.nixpkgs {};
       callback-rs = old: {
         LIBCLANG_PATH = "${nixpkgs.llvmPackages.libclang}/lib";
         buildInputs = old.buildInputs or [] ++ [ hs-lib ];
+        nativeBuildInputs = [ nixpkgs.clang ];
       };
     };
 
