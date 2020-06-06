@@ -1,0 +1,39 @@
+cabal-version:       2.4
+name:                plugins-export
+version:             0.1.0.0
+-- synopsis:
+-- description:
+-- bug-reports:
+license:             BSD-3-Clause
+license-file:        LICENSE
+author:              Christopher Chalmers
+maintainer:          c.chalmers@me.com
+-- copyright:
+-- category:
+extra-source-files:  CHANGELOG.md
+
+library
+  -- exposed-modules:
+  -- other-modules:
+  -- other-extensions:
+  build-depends:
+    base ^>=4.12.0.0,
+    plugins ^>= 1.6.0
+  hs-source-dirs:      src
+  default-language:    Haskell2010
+  exposed-modules:     System.Plugins.Export
+
+foreign-library plugins-export
+  type:                native-shared
+
+  if os(Windows)
+    options: standalone
+    mod-def-file: Callback.def
+
+  other-modules:       System.Plugins.Export
+  build-depends:
+    base ^>=4.12.0.0,
+    plugins ^>= 1.6.0
+  hs-source-dirs:      src
+  c-sources:           csrc/plugins-hs.c
+  default-language:    Haskell2010
