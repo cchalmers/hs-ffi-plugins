@@ -10,6 +10,8 @@ module System.Plugins.Export
 -- unsafeSizeof
  where
 
+import qualified GHC.Types as Prim
+
 
 import           Foreign.C.Types
 import           Foreign.ForeignPtr
@@ -25,6 +27,7 @@ import Foreign
 import Data.IORef
 import System.IO.Unsafe
 
+import Foreign.Ptr
 import Foreign.StablePtr
 import Foreign.C (CString, peekCString)
 
@@ -33,9 +36,14 @@ import qualified System.Plugins.Load as Load
 -- foreign import ccall "dynamic" ioNext :: FunPtr (Ptr () -> IO Word64) -> Ptr () -> IO Word64
 -- foreign import ccall "dynamic" iofd :: FunPtr (Ptr () -> IO Bool) -> Ptr () -> IO Bool
 
-foreign import ccall "dynamic" ffiNext ::
-  FunPtr (Ptr () -> Ptr Word64 -> IO Bool)
-       -> Ptr () -> Ptr Word64 -> IO Bool
+foreign import ccall "dynamic" ffiNextUnit ::
+  FunPtr (Ptr () -> Ptr () -> IO Bool)
+       -> Ptr () -> Ptr () -> IO Bool
+
+ffiNext ::
+  FunPtr (Ptr () -> Ptr a -> IO Bool)
+       -> Ptr () -> Ptr a -> IO Bool
+ffiNext fptr stb a = ffiNextUnit (castFunPtr fptr) stb (castPtr a)
 
 foreign import ccall "dynamic" ffiFree ::
   FunPtr (Ptr () -> IO ()) -> Ptr () -> IO ()
@@ -46,7 +54,7 @@ stableRef a = newIORef a >>= newStablePtr
 loadList
   :: CString -- ^ object file
   -> CString -- ^ symbol name
-  -> Ptr (StablePtr (IORef [Word64]))
+  -> Ptr (StablePtr (IORef [Prim.Any]))
   -- ^ pointer that list will be written to
   -> IO Bool
 loadList objC symC ptrPtr = do
@@ -62,43 +70,44 @@ loadList objC symC ptrPtr = do
       pure False
     Load.LoadSuccess _m a -> do
       putStrLn "LOAD SUCCESS"
-      ioRef <- newIORef (a :: [Word64])
+      ioRef <- newIORef (a :: [Prim.Any])
       stbPtr <- newStablePtr ioRef
       Foreign.poke ptrPtr stbPtr
       pure True
 
 foreignList
-  :: FunPtr (Ptr () -> Ptr Word64 -> IO Bool)
+  :: Storable a
+  => FunPtr (Ptr () -> Ptr a -> IO Bool)
   -> FunPtr (Ptr () -> IO ())
   -> Ptr ()
-  -> IO [Word64]
+  -> IO [a]
 foreignList next free ctx = do
   let iom = alloca $ \w -> do
-        -- print w
         ffiNext next ctx w >>= \case
           True -> Just <$> Foreign.peek w
           False -> ffiFree free ctx >> pure Nothing
   lazyIOM iom
 
 foreignListRef
-  :: FunPtr (Ptr () -> Ptr Word64 -> IO Bool)
+  :: Storable a
+  => FunPtr (Ptr () -> Ptr a -> IO Bool)
   -> FunPtr (Ptr () -> IO ())
   -> Ptr ()
-  -> IO (StablePtr (IORef [Word64]))
+  -> IO (StablePtr (IORef [a]))
 foreignListRef next free ctx = do
   foreignList next free ctx >>= stableRef
 
 -- | Clone a stable pointer to an ioref list.
 cloneStableRef
-  :: StablePtr (IORef [Word64])
-  -> IO (StablePtr (IORef [Word64]))
+  :: StablePtr (IORef [Prim.Any])
+  -> IO (StablePtr (IORef [Prim.Any]))
 cloneStableRef ptr = do
   ioref <- deRefStablePtr ptr
   xs <- readIORef ioref
   ioref' <- newIORef xs
   newStablePtr ioref'
 
--- | Clone a stable pointer to an ioref list.
+-- | Free a stable pointer
 freeStable
   :: StablePtr ()
   -> IO ()
@@ -174,8 +183,8 @@ loadloadload = pure ()
 foreign export ccall hello :: IO ()
 foreign export ccall mkNewList :: IO (StablePtr (IORef [Word64]))
 foreign export ccall cloneStableRef
-  :: StablePtr (IORef [Word64])
-  -> IO (StablePtr (IORef [Word64]))
+  :: StablePtr (IORef [Prim.Any])
+  -> IO (StablePtr (IORef [Prim.Any]))
 
 foreign export ccall freeStable :: StablePtr () -> IO ()
 
@@ -189,5 +198,5 @@ foreign export ccall loadloadload :: IO ()
 foreign export ccall loadList
   :: CString
   -> CString
-  -> Ptr (StablePtr (IORef [Word64]))
+  -> Ptr (StablePtr (IORef [Prim.Any]))
   -> IO Bool

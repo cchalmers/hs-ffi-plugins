@@ -75,8 +75,10 @@ impl HsList<u64> {
                     true
                 }
             });
+        // need a second box because Box<dyn> is special (could probably avoid it by specialising)
         let boxed_ctx = Box::new(closure); // 📦📦
         let ctx = Box::into_raw(boxed_ctx);
+
         // all these different ways to not get the right pointer
         // println!("run_u64_list {:p}", run_u64_list);
         // println!("run_ptr {:p}", run_ptr);
@@ -118,13 +120,21 @@ pub trait HsFfi {
     unsafe fn next_list(hsptr: ffi::HsStablePtr, t: *mut Self) -> bool;
 }
 
-// macro_rules! hs_ffi(ty: $type, nm: $expr)
-
-impl HsFfi for u64 {
-    unsafe fn next_list(hsptr: ffi::HsStablePtr, t: *mut Self) -> bool {
-        ffi::nextList64(hsptr, t as _) != 0
+macro_rules! hs_ffi {
+    ($ty: ty, $nm: ident) => {
+        impl HsFfi for $ty {
+            unsafe fn next_list(hsptr: ffi::HsStablePtr, t: *mut Self) -> bool {
+                ffi::$nm(hsptr, t as _) != 0
+            }
+        }
     }
 }
+
+hs_ffi!(u64, nextList64);
+hs_ffi!(u32, nextList32);
+hs_ffi!(u16, nextList16);
+hs_ffi!(u8, nextList8);
+hs_ffi!(bool, nextListBool);
 
 impl<T: HsFfi> Iterator for HsList<T> {
     type Item = T;

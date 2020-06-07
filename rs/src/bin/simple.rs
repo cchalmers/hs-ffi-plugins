@@ -10,4 +10,7 @@ fn main() {
     let ptr = unsafe { dynamic::load_symbol("../dyn/Plug.o", "myCoolList") };
     let list = unsafe { HsList::from_ptr(ptr) };
     list.for_each(|x| eprintln!("x = {}", x));
+    let ptr = unsafe { dynamic::load_symbol("../dyn2/Plug2.o", "myCoolList") };
+    let list = unsafe { HsList::from_ptr(ptr) };
+    list.for_each(|x| eprintln!("y = {}", x));
 }
