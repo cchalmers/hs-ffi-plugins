@@ -160,11 +160,41 @@ nextList list ptr = do
       Foreign.poke ptr x
       pure True
 
-foreign export ccall foreignListRef
-  :: FunPtr (Ptr () -> Ptr Word64 -> IO Bool)
+type ForeignListType a
+   = FunPtr (Ptr () -> Ptr a -> IO Bool)
   -> FunPtr (Ptr () -> IO ())
   -> Ptr ()
-  -> IO (StablePtr (IORef [Word64]))
+  -> IO (StablePtr (IORef [a]))
+
+foreignListRefU64 :: ForeignListType Word64
+foreignListRefU64 = foreignListRef
+foreignListRefU32 :: ForeignListType Word32
+foreignListRefU32 = foreignListRef
+foreignListRefU16 :: ForeignListType Word16
+foreignListRefU16 = foreignListRef
+foreignListRefU8  :: ForeignListType Word8
+foreignListRefU8  = foreignListRef
+foreignListRefI64 :: ForeignListType Int64
+foreignListRefI64 = foreignListRef
+foreignListRefI32 :: ForeignListType Int32
+foreignListRefI32 = foreignListRef
+foreignListRefI16 :: ForeignListType Int16
+foreignListRefI16 = foreignListRef
+foreignListRefI8  :: ForeignListType Int8
+foreignListRefI8  = foreignListRef
+
+foreign export ccall foreignListRefU64 :: ForeignListType Word64
+foreign export ccall foreignListRefU32 :: ForeignListType Word32
+foreign export ccall foreignListRefU16 :: ForeignListType Word16
+foreign export ccall foreignListRefU8  :: ForeignListType Word8
+foreign export ccall foreignListRefI64 :: ForeignListType Int64
+foreign export ccall foreignListRefI32 :: ForeignListType Int32
+foreign export ccall foreignListRefI16 :: ForeignListType Int16
+foreign export ccall foreignListRefI8  :: ForeignListType Int8
+-- foreign export ccall foreignListRefU8 :: ForeignListType Bool
+
+-- nextList8 :: StablePtr (IORef [Word8]) -> Ptr Word8 -> IO Bool
+-- nextList8 = nextList
 
 nextList8 :: StablePtr (IORef [Word8]) -> Ptr Word8 -> IO Bool
 nextList8 = nextList
@@ -174,8 +204,8 @@ nextList32 :: StablePtr (IORef [Word32]) -> Ptr Word32 -> IO Bool
 nextList32 = nextList
 nextList64 :: StablePtr (IORef [Word64]) -> Ptr Word64 -> IO Bool
 nextList64 = nextList
-nextListBool :: StablePtr (IORef [Bool]) -> Ptr Bool -> IO Bool
-nextListBool = nextList
+-- nextListBool :: StablePtr (IORef [Bool]) -> Ptr Bool -> IO Bool
+-- nextListBool = nextList
 
 loadloadload :: IO ()
 loadloadload = pure ()
@@ -188,7 +218,7 @@ foreign export ccall cloneStableRef
 
 foreign export ccall freeStable :: StablePtr () -> IO ()
 
-foreign export ccall nextListBool :: StablePtr (IORef [Bool]) -> Ptr Bool -> IO Bool
+-- foreign export ccall nextListBool :: StablePtr (IORef [Bool]) -> Ptr Bool -> IO Bool
 foreign export ccall nextList8 :: StablePtr (IORef [Word8]) -> Ptr Word8 -> IO Bool
 foreign export ccall nextList16 :: StablePtr (IORef [Word16]) -> Ptr Word16 -> IO Bool
 foreign export ccall nextList32 :: StablePtr (IORef [Word32]) -> Ptr Word32 -> IO Bool

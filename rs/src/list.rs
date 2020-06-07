@@ -27,16 +27,16 @@ impl<T> Clone for HsList<T> {
 
 type CbBox<T> = Box<dyn FnMut(*mut T) -> bool>;
 
-extern "C" fn run_u64_list(fptr: *mut c_void, ptr: *mut u64) -> bool {
+extern "C" fn run_list<T>(fptr: *mut c_void, ptr: *mut T) -> bool {
     assert!(!fptr.is_null());
     assert!(!ptr.is_null());
-    let fptr = fptr as *mut CbBox<u64>;
+    let fptr = fptr as *mut CbBox<T>;
     unsafe { (*fptr)(ptr) }
 }
 
-extern "C" fn free_u64_list(fptr: *mut c_void) {
+extern "C" fn free_list<T>(fptr: *mut c_void) {
     assert!(!fptr.is_null());
-    let fptr = fptr as *mut CbBox<u64>;
+    let fptr = fptr as *mut CbBox<T>;
     unsafe {
         drop(Box::from_raw(fptr));
     }
@@ -79,28 +79,7 @@ impl HsList<u64> {
         let boxed_ctx = Box::new(closure); // 📦📦
         let ctx = Box::into_raw(boxed_ctx);
 
-        // all these different ways to not get the right pointer
-        // println!("run_u64_list {:p}", run_u64_list);
-        // println!("run_ptr {:p}", run_ptr);
-        // let run_ptr_ptr = &mut run_u64_list
-        //     as &mut _ // extern fn(*mut dyn FnMut(*mut u64) -> bool, *mut u64) -> bool;
-        //     as *mut _ // extern fn(*mut dyn FnMut(*mut u64) -> bool, *mut u64) -> bool;
-        //     as *mut extern fn();
-        // println!("&run_u64_list {:p}", unsafe {&run_u64_list});
-        // println!("run_ptr_ptr {:p}", unsafe {run_ptr_ptr});
-        // println!("*run_ptr_ptr {:p}", unsafe {*run_ptr_ptr});
-
-        // Haskell doesn't export the right types for function pointers, all functions look like
-        // FunPtr(IO ()). Transmute is the only way I've found to do this.
-        let run_ptr = unsafe {
-            std::mem::transmute::<extern "C" fn(*mut c_void, *mut u64) -> bool, extern "C" fn()>(
-                run_u64_list,
-            )
-        };
-        let free_ptr = unsafe {
-            std::mem::transmute::<extern "C" fn(*mut c_void), extern "C" fn()>(free_u64_list)
-        };
-        let ptr = unsafe { ffi::foreignListRef(Some(run_ptr), Some(free_ptr), ctx as _) };
+        let ptr = unsafe { u64::mk_list(run_list::<u64>, free_list::<u64>, ctx as _) };
         HsList {
             ptr,
             phantom: PhantomData,
@@ -118,23 +97,49 @@ impl HsList<u64> {
 
 pub trait HsFfi {
     unsafe fn next_list(hsptr: ffi::HsStablePtr, t: *mut Self) -> bool;
+    unsafe fn mk_list(
+        run_ptr: extern "C" fn(*mut c_void, *mut Self) -> bool,
+        free_ptr: extern "C" fn(*mut c_void),
+        ctx: *mut c_void
+        ) -> ffi::HsStablePtr;
 }
 
 macro_rules! hs_ffi {
-    ($ty: ty, $nm: ident) => {
-        impl HsFfi for $ty {
-            unsafe fn next_list(hsptr: ffi::HsStablePtr, t: *mut Self) -> bool {
-                ffi::$nm(hsptr, t as _) != 0
-            }
-        }
+    ($ty: ty, $nm: ident, $mk_list_nm: ident) => {
+
+impl HsFfi for $ty {
+    unsafe fn next_list(hsptr: ffi::HsStablePtr, t: *mut Self) -> bool {
+        ffi::$nm(hsptr, t as _) != 0
+    }
+    unsafe fn mk_list(
+        run_ptr: extern "C" fn(*mut c_void, *mut Self) -> bool,
+        free_ptr: extern "C" fn(*mut c_void),
+        ctx: *mut c_void
+        ) -> ffi::HsStablePtr {
+        use std::mem::transmute;
+        // Haskell exports all function pointers as FunPtr(IO ()) so we need to transmute here.
+        // This is super unsafe and can easily go very wrong but I don't know a better way.
+        let run_ptr = transmute::<extern "C" fn(*mut c_void, *mut $ty) -> bool, extern "C" fn()>(
+            run_ptr,
+        );
+        let free_ptr =
+            transmute::<extern "C" fn(*mut c_void), extern "C" fn()>(free_ptr);
+        ffi::$mk_list_nm(Some(run_ptr), Some(free_ptr), ctx as _)
     }
 }
 
-hs_ffi!(u64, nextList64);
-hs_ffi!(u32, nextList32);
-hs_ffi!(u16, nextList16);
-hs_ffi!(u8, nextList8);
-hs_ffi!(bool, nextListBool);
+    }
+}
+
+hs_ffi!(i64, nextList64, foreignListRefI64);
+hs_ffi!(i32, nextList32, foreignListRefI64);
+hs_ffi!(i16, nextList16, foreignListRefI64);
+hs_ffi!(i8, nextList8, foreignListRefI64);
+hs_ffi!(u64, nextList64, foreignListRefU64);
+hs_ffi!(u32, nextList32, foreignListRefU64);
+hs_ffi!(u16, nextList16, foreignListRefU64);
+hs_ffi!(u8, nextList8, foreignListRefU64);
+// hs_ffi!(bool, nextListBool);
 
 impl<T: HsFfi> Iterator for HsList<T> {
     type Item = T;
