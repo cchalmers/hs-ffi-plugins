@@ -3,7 +3,10 @@
 let nixpkgs = import sources.nixpkgs {};
     haskellPackages = nixpkgs.haskell.packages.ghc865.override {
       overrides = self: super: {
-        plugins = nixpkgs.haskell.lib.markUnbroken super.plugins;
+        # plugins = nixpkgs.haskell.lib.markUnbroken super.plugins;
+        dyn2 = haskellPackages.callCabal2nix "dyn2" (filterHaskellSource ./dyn2) {};
+        plugs = haskellPackages.callCabal2nix "plugs" (filterHaskellSource ./plugs) {};
+        plugins = haskellPackages.callCabal2nix "plugins" (filterHaskellSource ../plugins) {};
       };
     };
 
@@ -70,4 +73,4 @@ let nixpkgs = import sources.nixpkgs {};
 
     crate2nix = import sources.crate2nix { nixpkgs = sources.nixpkgs; };
 
-in  { plugins = haskellPackages.plugins; inherit crate2nix nixpkgs hs-lib hs-lib-hs; } // packages
+in  { inherit (haskellPackages) dyn2 plugs plugins; inherit crate2nix nixpkgs hs-lib hs-lib-hs; } // packages

@@ -7,8 +7,9 @@ fn main() {
         ffi::potatoInit();
     }
 
-    let ptr = unsafe { dynamic::load_symbol("../dyn/Plug.o", "myCoolList") };
+    let ptr = unsafe { dynamic::load_symbol("../dyn/Plug.so", "myCoolList") };
     let list = unsafe { HsList::from_ptr(ptr) };
+    eprintln!("made the list");
     list.for_each(|x| eprintln!("x = {}", x));
     let ptr = unsafe { dynamic::load_symbol("../dyn2/Plug2.o", "myCoolList") };
     let list = unsafe { HsList::from_ptr(ptr) };
