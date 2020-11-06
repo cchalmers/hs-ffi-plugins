@@ -1,0 +1,13 @@
+cabal-version:       2.4
+name:                dyn2
+version:             0.1.0.0
+license:             BSD-3-Clause
+author:              Christopher Chalmers
+maintainer:          c.chalmers@me.com
+
+library
+  build-depends:
+    base ^>=4.12.0.0,
+  hs-source-dirs:      src
+  default-language:    Haskell2010
+  exposed-modules:     Plug2

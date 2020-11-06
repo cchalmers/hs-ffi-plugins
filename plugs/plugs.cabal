@@ -1,0 +1,39 @@
+cabal-version:       2.4
+name:                plugs
+version:             0.1.0.0
+-- synopsis:
+-- description:
+-- bug-reports:
+license:             BSD-3-Clause
+author:              Christopher Chalmers
+maintainer:          c.chalmers@me.com
+-- copyright:
+-- category:
+
+library
+  -- exposed-modules:
+  -- other-modules:
+  -- other-extensions:
+  build-depends:
+    base ^>=4.12.0.0,
+    -- plugins ^>= 1.6.0,
+    dyn2,
+    ghc,
+    ghc-paths,
+    ghc-prim,
+  hs-source-dirs:      src
+  default-language:    Haskell2010
+  exposed-modules:     Plugs
+
+executable main
+  -- exposed-modules:
+  -- other-modules:
+  -- other-extensions:
+  build-depends:
+    base ^>=4.12.0.0,
+    plugins ^>= 1.6.0,
+    plugs,
+    dyn2,
+    ghc-prim,
+  default-language:    Haskell2010
+  main-is:     main.hs
