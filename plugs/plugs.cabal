@@ -31,9 +31,9 @@ executable main
   -- other-extensions:
   build-depends:
     base ^>=4.12.0.0,
-    plugins ^>= 1.6.0,
+    -- plugins ^>= 1.6.0,
     plugs,
     dyn2,
     ghc-prim,
   default-language:    Haskell2010
-  main-is:     main.hs
+  main-is:     Main.hs
