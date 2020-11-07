@@ -14,6 +14,8 @@ import           BinIface
 import           DynFlags               (defaultDynFlags, initDynFlags)
 import qualified DynFlags
 import qualified GHC
+import qualified GHCi.Message           as GHCi
+import           GhcMonad               (Ghc (..), Session (..))
 import           HscMain                (newHscEnv)
 import           HscTypes
 import           IfaceSyn
@@ -26,10 +28,93 @@ import           TcRnMonad              (initTcRnIf)
 
 import           GHC.Paths              (libdir)
 
+import           Control.Exception
 import           Control.Monad.IO.Class
 import qualified Data.Data              as Data
+import           Data.Dynamic
+import           Data.IORef
 import           Data.Typeable
+import           Foreign.C              (CString, peekCString)
+import           Foreign.StablePtr
 import           Unsafe.Coerce
+
+-- | Create a new initialised session.
+unsafeNewSession :: IO Session
+unsafeNewSession = do
+  ref <- newIORef (error "empty session")
+  let session = Session ref
+  flip unGhc session $ GHC.initGhcMonad (Just libdir)
+  linkInMemory session -- TEMP
+  pure session
+
+linkInMemory :: Session -> IO ()
+linkInMemory session = flip unGhc session $ do
+  dflags <- GHC.getSessionDynFlags
+  -- returns list of new packages that may need to be linked, unsure
+  _ <- GHC.setSessionDynFlags dflags
+    { DynFlags.hscTarget = DynFlags.HscAsm
+    , DynFlags.ghcLink   = DynFlags.LinkInMemory
+    }
+  pure ()
+
+importModules :: Session -> [String] -> IO ()
+importModules session modules = flip unGhc session $ do
+  GHC.setContext $ map (GHC.IIDecl . GHC.simpleImportDecl . mkModuleName) modules
+
+compExpr :: Session -> String -> IO (Either GHCi.SerializableException GHC.HValue)
+compExpr session expr = tryJust (Just . GHCi.toSerializableException) $ flip unGhc session $ do
+  GHC.compileExpr expr
+
+compExprDyn :: Session -> String -> IO (Either GHCi.SerializableException Dynamic)
+compExprDyn session expr = tryJust (Just . GHCi.toSerializableException) $ flip unGhc session $ do
+  GHC.dynCompileExpr expr
+
+cleanup :: Session -> IO ()
+cleanup session = flip unGhc session $ GHC.withCleanupSession (pure ())
+
+rrr :: String -> IO ()
+rrr expr = do
+  session <- unsafeNewSession
+  importModules session ["Prelude", "Plug2"]
+  res <- compExpr session expr
+  either print (\val -> print (unsafeCoerce val :: [Int])) res
+  -- print is
+  cleanup session
+
+-- c ffi ---------------------------------------------------------------
+
+new_session :: IO (StablePtr Session)
+new_session = unsafeNewSession >>= newStablePtr
+
+run_expr :: StablePtr Session -> CString -> IO ()
+run_expr ptr cexpr = do
+  session <- deRefStablePtr ptr
+  expr <- peekCString cexpr
+  compExpr session ("print (" <> expr <> ") :: IO ()") >>= \case
+    Right io -> unsafeCoerce io
+    Left err -> print err
+
+
+cleanup_session :: StablePtr Session -> IO ()
+cleanup_session ptr = do
+  sess <- deRefStablePtr ptr
+  cleanup sess
+
+import_module :: StablePtr Session -> CString -> IO ()
+import_module ptr cmod = do
+  session <- deRefStablePtr ptr
+  modu <- peekCString cmod
+  importModules session [modu]
+
+foreign export ccall new_session :: IO (StablePtr Session)
+foreign export ccall run_expr :: StablePtr Session -> CString -> IO ()
+foreign export ccall cleanup_session :: StablePtr Session -> IO ()
+foreign export ccall import_module :: StablePtr Session -> CString -> IO ()
+
+-- experimenting -------------------------------------------------------
+
+
+-- load
 
 ifaceModuleName :: ModIface -> String
 ifaceModuleName = moduleNameString . moduleName . mi_module
@@ -82,7 +167,7 @@ xxx = withSession' $ do
   -- Anyway, loading like this probably isn't what I want, just having a precompiled package in scope
   -- means I can load the module normally.
 
-  GHC.load GHC.LoadAllTargets >>= liftIO . print
+  -- GHC.load GHC.LoadAllTargets >>= liftIO . print
   GHC.setContext (map (GHC.IIDecl . GHC.simpleImportDecl)
     [mkModuleName "Prelude", mkModuleName "Plug2"])
 
