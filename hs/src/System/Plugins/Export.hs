@@ -2,15 +2,14 @@
 {-# LANGUAGE DeriveAnyClass           #-}
 {-# LANGUAGE DeriveGeneric            #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE GADTs                    #-}
 {-# LANGUAGE LambdaCase               #-}
 {-# LANGUAGE MagicHash                #-}
+{-# LANGUAGE ScopedTypeVariables      #-}
 {-# LANGUAGE TemplateHaskell          #-}
+{-# LANGUAGE TypeApplications         #-}
 {-# LANGUAGE UnboxedTuples            #-}
-module System.Plugins.Export
-  -- callback ,
--- unsafeSizeof
- where
-
+module System.Plugins.Export where
 
 import           Control.Concurrent
 import           Control.Exception
@@ -18,7 +17,8 @@ import           Control.Monad.IO.Class
 import qualified Data.Data              as Data
 import           Data.Dynamic
 import           Data.IORef
-import           Data.Typeable
+import           Data.Kind              (Type)
+import           Data.Typeable          (Proxy (..), typeRepFingerprint)
 import           Data.Word
 import           Foreign
 import           Foreign.C              (CString, peekCString)
@@ -28,7 +28,9 @@ import           Foreign.Marshal.Alloc
 import           Foreign.Ptr
 import           Foreign.StablePtr
 import           Foreign.Storable
+import           GHC.Fingerprint.Type
 import           System.IO.Unsafe
+import           Type.Reflection
 import           Unsafe.Coerce
 
 import qualified BasicTypes
@@ -144,6 +146,9 @@ myList = [1..]
 mkNewList :: IO (StablePtr (IORef [Word64]))
 mkNewList = newIORef myList >>= newStablePtr
 
+mk_list_iter :: StablePtr [Any] -> IO (StablePtr (IORef [Any]))
+mk_list_iter ptr = deRefStablePtr ptr >>= newIORef >>= newStablePtr
+
 nextList :: Storable a => StablePtr (IORef [a]) -> Ptr a -> IO Bool
 nextList list ptr = do
   ioref <- deRefStablePtr list
@@ -206,6 +211,7 @@ loadloadload = pure ()
 
 foreign export ccall hello :: IO ()
 foreign export ccall mkNewList :: IO (StablePtr (IORef [Word64]))
+foreign export ccall mk_list_iter :: StablePtr [Any] -> IO (StablePtr (IORef [Any]))
 foreign export ccall cloneStableRef
   :: StablePtr (IORef [Prim.Any])
   -> IO (StablePtr (IORef [Prim.Any]))
@@ -219,6 +225,15 @@ foreign export ccall nextList32 :: StablePtr (IORef [Word32]) -> Ptr Word32 -> I
 foreign export ccall nextList64 :: StablePtr (IORef [Word64]) -> Ptr Word64 -> IO Bool
 
 foreign export ccall loadloadload :: IO ()
+
+deref_word64 :: StablePtr Word64 -> IO Word64
+deref_word64 = deRefStablePtr
+
+deref_int64 :: StablePtr Int64 -> IO Int64
+deref_int64 = deRefStablePtr
+
+foreign export ccall deref_word64 :: StablePtr Word64 -> IO Word64
+foreign export ccall deref_int64 :: StablePtr Int64 -> IO Int64
 
 -- ghci like interface
 
@@ -266,7 +281,54 @@ rrr expr = do
   -- print is
   cleanup session
 
--- c ffi ---------------------------------------------------------------
+-- typereps ------------------------------------------------------------
+
+int_type_rep :: IO (StablePtr SomeTypeRep)
+int_type_rep = newStablePtr $ someTypeRep (Proxy @Int)
+
+word_type_rep :: IO (StablePtr SomeTypeRep)
+word_type_rep = newStablePtr $ someTypeRep (Proxy @Word)
+
+int64_type_rep :: IO (StablePtr SomeTypeRep)
+int64_type_rep = newStablePtr $ someTypeRep (Proxy @Int64)
+
+word64_type_rep :: IO (StablePtr SomeTypeRep)
+word64_type_rep = newStablePtr $ someTypeRep (Proxy @Word64)
+
+list_type_rep :: StablePtr SomeTypeRep -> IO (StablePtr SomeTypeRep)
+list_type_rep aTyPtr = do
+  SomeTypeRep (aTy :: TypeRep a) <- deRefStablePtr aTyPtr
+  case eqTypeRep (typeRepKind aTy) (typeRep @Type) of
+    Nothing    -> error "That wasn't a Type TypeRep!"
+    Just HRefl -> newStablePtr $ withTypeable aTy (someTypeRep (Proxy @[a]))
+
+type_rep_fingerprint :: StablePtr SomeTypeRep -> Ptr Word64 -> Ptr Word64 -> IO ()
+type_rep_fingerprint tyPtr aPtr bPtr = do
+  typeRep <- deRefStablePtr tyPtr
+  let Fingerprint a b = typeRepFingerprint typeRep
+  poke aPtr a
+  poke bPtr b
+
+dyn_type_rep :: StablePtr Dynamic -> IO (StablePtr SomeTypeRep)
+dyn_type_rep dynPtr = do
+  dyn <- deRefStablePtr dynPtr
+  newStablePtr $ dynTypeRep dyn
+
+dyn_val :: StablePtr Dynamic -> IO (StablePtr Any)
+dyn_val dynPtr = do
+  Dynamic rep a <- deRefStablePtr dynPtr
+  newStablePtr $ unsafeCoerce a
+
+foreign export ccall int_type_rep :: IO (StablePtr SomeTypeRep)
+foreign export ccall word_type_rep :: IO (StablePtr SomeTypeRep)
+foreign export ccall int64_type_rep :: IO (StablePtr SomeTypeRep)
+foreign export ccall word64_type_rep :: IO (StablePtr SomeTypeRep)
+foreign export ccall list_type_rep :: StablePtr SomeTypeRep -> IO (StablePtr SomeTypeRep)
+foreign export ccall type_rep_fingerprint :: StablePtr SomeTypeRep -> Ptr Word64 -> Ptr Word64 -> IO ()
+foreign export ccall dyn_type_rep :: StablePtr Dynamic -> IO (StablePtr SomeTypeRep)
+foreign export ccall dyn_val :: StablePtr Dynamic -> IO (StablePtr Any)
+
+-- ghc api -------------------------------------------------------------
 
 new_session :: IO (StablePtr Session)
 new_session = unsafeNewSession >>= newStablePtr
@@ -279,19 +341,31 @@ run_expr ptr cexpr = do
     Right io -> unsafeCoerce io
     Left err -> print err
 
+run_expr_dyn :: StablePtr Session -> CString -> Ptr (StablePtr Dynamic) -> IO Word64
+run_expr_dyn ptr cexpr ptrPtr = do
+  session <- deRefStablePtr ptr
+  expr <- peekCString cexpr
+  compExprDyn session expr >>= \case
+    Right dyn -> do
+      newStablePtr dyn >>= poke ptrPtr
+      pure 1
+    Left err -> do
+      print err
+      pure 0
 
 cleanup_session :: StablePtr Session -> IO ()
 cleanup_session ptr = do
   sess <- deRefStablePtr ptr
   cleanup sess
 
-import_module :: StablePtr Session -> CString -> IO ()
-import_module ptr cmod = do
+import_modules :: StablePtr Session -> Int -> Ptr CString -> IO ()
+import_modules ptr n cmods = do
   session <- deRefStablePtr ptr
-  modu <- peekCString cmod
-  importModules session [modu]
+  mods <- mapM (\n -> peekElemOff cmods n >>= peekCString) [0..n-1]
+  importModules session mods
 
 foreign export ccall new_session :: IO (StablePtr Session)
 foreign export ccall run_expr :: StablePtr Session -> CString -> IO ()
+foreign export ccall run_expr_dyn :: StablePtr Session -> CString -> Ptr (StablePtr Dynamic) -> IO Word64
 foreign export ccall cleanup_session :: StablePtr Session -> IO ()
-foreign export ccall import_module :: StablePtr Session -> CString -> IO ()
+foreign export ccall import_modules :: StablePtr Session -> Int -> Ptr CString -> IO ()

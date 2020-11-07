@@ -1,5 +1,6 @@
-use callback_rs::session;
+use callback_rs::dynamic::Typeable;
 use callback_rs::ffi;
+use callback_rs::session;
 // use callback_rs::list::HsList;
 
 fn main() {
@@ -8,8 +9,15 @@ fn main() {
     }
 
     let session = session::Session::new();
-    session.import_module("Prelude");
+    session.import_modules(&["Prelude"]);
     session.run_expr("head [1,2,3]");
+    session.import_modules(&["Prelude", "Data.Word"]);
+    if let Some(dynamic) = session.run_expr_dyn("head [4,1,2,3] :: Word64") {
+        eprintln!("the value is {:?}", u64::from_dynamic(&dynamic))
+    } else {
+        eprintln!("Was not successful");
+    }
+    // session.run_expr("last [1..]");
 
     // let ptr = unsafe { dynamic::load_symbol("../dyn/Plug.so", "myCoolList") };
     // let list = unsafe { HsList::from_ptr(ptr) };

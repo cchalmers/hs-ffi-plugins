@@ -100,35 +100,33 @@ pub trait HsFfi {
     unsafe fn mk_list(
         run_ptr: extern "C" fn(*mut c_void, *mut Self) -> bool,
         free_ptr: extern "C" fn(*mut c_void),
-        ctx: *mut c_void
-        ) -> ffi::HsStablePtr;
+        ctx: *mut c_void,
+    ) -> ffi::HsStablePtr;
 }
 
 macro_rules! hs_ffi {
     ($ty: ty, $nm: ident, $mk_list_nm: ident) => {
-
-impl HsFfi for $ty {
-    unsafe fn next_list(hsptr: ffi::HsStablePtr, t: *mut Self) -> bool {
-        ffi::$nm(hsptr, t as _) != 0
-    }
-    unsafe fn mk_list(
-        run_ptr: extern "C" fn(*mut c_void, *mut Self) -> bool,
-        free_ptr: extern "C" fn(*mut c_void),
-        ctx: *mut c_void
-        ) -> ffi::HsStablePtr {
-        use std::mem::transmute;
-        // Haskell exports all function pointers as FunPtr(IO ()) so we need to transmute here.
-        // This is super unsafe and can easily go very wrong but I don't know a better way.
-        let run_ptr = transmute::<extern "C" fn(*mut c_void, *mut $ty) -> bool, extern "C" fn()>(
-            run_ptr,
-        );
-        let free_ptr =
-            transmute::<extern "C" fn(*mut c_void), extern "C" fn()>(free_ptr);
-        ffi::$mk_list_nm(Some(run_ptr), Some(free_ptr), ctx as _)
-    }
-}
-
-    }
+        impl HsFfi for $ty {
+            unsafe fn next_list(hsptr: ffi::HsStablePtr, t: *mut Self) -> bool {
+                ffi::$nm(hsptr, t as _) != 0
+            }
+            unsafe fn mk_list(
+                run_ptr: extern "C" fn(*mut c_void, *mut Self) -> bool,
+                free_ptr: extern "C" fn(*mut c_void),
+                ctx: *mut c_void,
+            ) -> ffi::HsStablePtr {
+                use std::mem::transmute;
+                // Haskell exports all function pointers as FunPtr(IO ()) so we need to transmute here.
+                // This is super unsafe and can easily go very wrong but I don't know a better way.
+                let run_ptr = transmute::<
+                    extern "C" fn(*mut c_void, *mut $ty) -> bool,
+                    extern "C" fn(),
+                >(run_ptr);
+                let free_ptr = transmute::<extern "C" fn(*mut c_void), extern "C" fn()>(free_ptr);
+                ffi::$mk_list_nm(Some(run_ptr), Some(free_ptr), ctx as _)
+            }
+        }
+    };
 }
 
 hs_ffi!(i64, nextList64, foreignListRefI64);

@@ -1,7 +1,8 @@
+use crate::dynamic::Dynamic;
 use crate::ffi;
 
 pub struct Session {
-    ptr: ffi::HsStablePtr
+    ptr: ffi::HsStablePtr,
 }
 
 impl Session {
@@ -11,25 +12,40 @@ impl Session {
         }
     }
 
-    pub fn import_module(&self, module_name: &str) {
-        let cstr = std::ffi::CString::new(module_name).expect("module_name");
-        unsafe {
-            ffi::import_module(self.ptr, cstr.as_ptr() as *mut _)
-        }
+    pub fn import_modules(&self, module_names: &[&str]) {
+        let cstrs: Vec<_> = module_names
+            .iter()
+            .map(|&nm| std::ffi::CString::new(nm).expect("module_name"))
+            .collect();
+        let cstr_ptrs: Vec<_> = cstrs.iter().map(|cstr| cstr.as_ptr()).collect();
+        unsafe { ffi::import_modules(self.ptr, cstrs.len() as i64, cstr_ptrs.as_ptr() as *mut _) }
     }
 
     pub fn run_expr(&self, expr: &str) {
         let cstr = std::ffi::CString::new(expr).expect("module_name");
-        unsafe {
-            ffi::run_expr(self.ptr, cstr.as_ptr() as *mut _)
+        unsafe { ffi::run_expr(self.ptr, cstr.as_ptr() as *mut _) }
+    }
+
+    pub fn run_expr_dyn(&self, expr: &str) -> Option<Dynamic> {
+        let cstr = std::ffi::CString::new(expr).expect("module_name");
+        let mut dyn_ptr = std::ptr::null_mut();
+        let success = unsafe {
+            ffi::run_expr_dyn(
+                self.ptr,
+                cstr.as_ptr() as *mut _,
+                &mut dyn_ptr as *mut _ as *mut _,
+            )
+        };
+        if success == 1 {
+            Some(Dynamic { ptr: dyn_ptr })
+        } else {
+            None
         }
     }
 }
 
 impl Drop for Session {
     fn drop(&mut self) {
-        unsafe {
-            ffi::cleanup_session(self.ptr)
-        }
+        unsafe { ffi::cleanup_session(self.ptr) }
     }
 }
