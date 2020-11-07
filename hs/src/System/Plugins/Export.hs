@@ -1,37 +1,55 @@
-{-# LANGUAGE MagicHash,UnboxedTuples #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE CPP                      #-}
 {-# LANGUAGE DeriveAnyClass           #-}
 {-# LANGUAGE DeriveGeneric            #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE LambdaCase               #-}
+{-# LANGUAGE MagicHash                #-}
 {-# LANGUAGE TemplateHaskell          #-}
+{-# LANGUAGE UnboxedTuples            #-}
 module System.Plugins.Export
   -- callback ,
 -- unsafeSizeof
  where
 
-import qualified GHC.Types as Prim
 
-
+import           Control.Concurrent
+import           Control.Exception
+import           Control.Monad.IO.Class
+import qualified Data.Data              as Data
+import           Data.Dynamic
+import           Data.IORef
+import           Data.Typeable
+import           Data.Word
+import           Foreign
+import           Foreign.C              (CString, peekCString)
 import           Foreign.C.Types
 import           Foreign.ForeignPtr
 import           Foreign.Marshal.Alloc
 import           Foreign.Ptr
 import           Foreign.StablePtr
 import           Foreign.Storable
-import Data.Word
-import Control.Concurrent
-import GHC.Exts
-import Foreign
+import           System.IO.Unsafe
+import           Unsafe.Coerce
 
-import Data.IORef
-import System.IO.Unsafe
-
-import Foreign.Ptr
-import Foreign.StablePtr
-import Foreign.C (CString, peekCString)
-
-import qualified System.Plugins.Load as Load
+import qualified BasicTypes
+import           BinIface
+import           DynFlags               (defaultDynFlags, initDynFlags)
+import qualified DynFlags
+import qualified GHC
+import           GHC.Exts
+import           GHC.Paths              (libdir)
+import qualified GHC.Types              as Prim
+import qualified GHCi.Message           as GHCi
+import           GhcMonad               (Ghc (..), Session (..))
+import           HscMain                (newHscEnv)
+import           HscTypes
+import           IfaceSyn
+import           Module
+import           Module                 (moduleName, moduleNameString)
+import           Name
+import           Outputable             hiding ((<>))
+import           SysTools               (initLlvmConfig, initSysTools)
+import           TcRnMonad              (initTcRnIf)
 
 -- foreign import ccall "dynamic" ioNext :: FunPtr (Ptr () -> IO Word64) -> Ptr () -> IO Word64
 -- foreign import ccall "dynamic" iofd :: FunPtr (Ptr () -> IO Bool) -> Ptr () -> IO Bool
@@ -50,30 +68,6 @@ foreign import ccall "dynamic" ffiFree ::
 
 stableRef :: a -> IO (StablePtr (IORef a))
 stableRef a = newIORef a >>= newStablePtr
-
-loadList
-  :: CString -- ^ object file
-  -> CString -- ^ symbol name
-  -> Ptr (StablePtr (IORef [Prim.Any]))
-  -- ^ pointer that list will be written to
-  -> IO Bool
-loadList objC symC ptrPtr = do
-  putStrLn "loadList has been called!"
-  obj <- peekCString objC
-  sym <- peekCString symC
-  putStrLn $ "the arguemtns are " <> obj <> " " <> sym
-  loaded <- Load.load obj [] [] sym
-  case loaded of
-    Load.LoadFailure e -> do
-      putStrLn "LOAD FAILURE"
-      print e
-      pure False
-    Load.LoadSuccess _m a -> do
-      putStrLn "LOAD SUCCESS"
-      ioRef <- newIORef (a :: [Prim.Any])
-      stbPtr <- newStablePtr ioRef
-      Foreign.poke ptrPtr stbPtr
-      pure True
 
 foreignList
   :: Storable a
@@ -225,8 +219,79 @@ foreign export ccall nextList32 :: StablePtr (IORef [Word32]) -> Ptr Word32 -> I
 foreign export ccall nextList64 :: StablePtr (IORef [Word64]) -> Ptr Word64 -> IO Bool
 
 foreign export ccall loadloadload :: IO ()
-foreign export ccall loadList
-  :: CString
-  -> CString
-  -> Ptr (StablePtr (IORef [Prim.Any]))
-  -> IO Bool
+
+-- ghci like interface
+
+
+-- | Create a new initialised session.
+unsafeNewSession :: IO Session
+unsafeNewSession = do
+  ref <- newIORef (error "empty session")
+  let session = Session ref
+  flip unGhc session $ GHC.initGhcMonad (Just libdir)
+  linkInMemory session -- TEMP
+  pure session
+
+linkInMemory :: Session -> IO ()
+linkInMemory session = flip unGhc session $ do
+  dflags <- GHC.getSessionDynFlags
+  -- returns list of new packages that may need to be linked, unsure
+  _ <- GHC.setSessionDynFlags dflags
+    { DynFlags.hscTarget = DynFlags.HscAsm
+    , DynFlags.ghcLink   = DynFlags.LinkInMemory
+    }
+  pure ()
+
+importModules :: Session -> [String] -> IO ()
+importModules session modules = flip unGhc session $ do
+  GHC.setContext $ map (GHC.IIDecl . GHC.simpleImportDecl . mkModuleName) modules
+
+compExpr :: Session -> String -> IO (Either GHCi.SerializableException GHC.HValue)
+compExpr session expr = tryJust (Just . GHCi.toSerializableException) $ flip unGhc session $ do
+  GHC.compileExpr expr
+
+compExprDyn :: Session -> String -> IO (Either GHCi.SerializableException Dynamic)
+compExprDyn session expr = tryJust (Just . GHCi.toSerializableException) $ flip unGhc session $ do
+  GHC.dynCompileExpr expr
+
+cleanup :: Session -> IO ()
+cleanup session = flip unGhc session $ GHC.withCleanupSession (pure ())
+
+rrr :: String -> IO ()
+rrr expr = do
+  session <- unsafeNewSession
+  importModules session ["Prelude", "Plug2"]
+  res <- compExpr session expr
+  either print (\val -> print (unsafeCoerce val :: [Int])) res
+  -- print is
+  cleanup session
+
+-- c ffi ---------------------------------------------------------------
+
+new_session :: IO (StablePtr Session)
+new_session = unsafeNewSession >>= newStablePtr
+
+run_expr :: StablePtr Session -> CString -> IO ()
+run_expr ptr cexpr = do
+  session <- deRefStablePtr ptr
+  expr <- peekCString cexpr
+  compExpr session ("print (" <> expr <> ") :: IO ()") >>= \case
+    Right io -> unsafeCoerce io
+    Left err -> print err
+
+
+cleanup_session :: StablePtr Session -> IO ()
+cleanup_session ptr = do
+  sess <- deRefStablePtr ptr
+  cleanup sess
+
+import_module :: StablePtr Session -> CString -> IO ()
+import_module ptr cmod = do
+  session <- deRefStablePtr ptr
+  modu <- peekCString cmod
+  importModules session [modu]
+
+foreign export ccall new_session :: IO (StablePtr Session)
+foreign export ccall run_expr :: StablePtr Session -> CString -> IO ()
+foreign export ccall cleanup_session :: StablePtr Session -> IO ()
+foreign export ccall import_module :: StablePtr Session -> CString -> IO ()

@@ -71,7 +71,7 @@ let nixpkgs = import sources.nixpkgs {};
       (_: pkg: pkg.build.override { inherit crateOverrides; })
       crateNix.workspaceMembers;
 
-    crate2nix = import sources.crate2nix { nixpkgs = sources.nixpkgs; };
+    # crate2nix = import sources.crate2nix { pkgs = sources.nixpkgs; };
 
 # in  { inherit (haskellPackages) dyn2 plugs plugins; inherit crate2nix nixpkgs hs-lib hs-lib-hs; } // packages
-in  { inherit (haskellPackages) dyn2 plugs; inherit crate2nix nixpkgs hs-lib hs-lib-hs; } // packages
+in  { inherit (haskellPackages) dyn2 plugs; inherit nixpkgs hs-lib hs-lib-hs; } // packages

@@ -118,12 +118,12 @@ fn main() {
 
         let mut dyn_ptr = std::ptr::null_mut();
         unsafe {
-            let res = ffi::loadList(
-                file.as_ptr() as _,
-                symbol.as_ptr() as _,
-                &mut dyn_ptr as *mut *mut c_void as _,
-            );
-            println!("res = {:?}", res);
+            // let res = ffi::loadList(
+            //     file.as_ptr() as _,
+            //     symbol.as_ptr() as _,
+            //     &mut dyn_ptr as *mut *mut c_void as _,
+            // );
+            // println!("res = {:?}", res);
         };
         let mut dyn_list = HsList { ptr: dyn_ptr };
         println!(
@@ -135,12 +135,12 @@ fn main() {
 
         let mut dyn_ptr = std::ptr::null_mut();
         unsafe {
-            let res = ffi::loadList(
-                file.as_ptr() as _,
-                symbol.as_ptr() as _,
-                &mut dyn_ptr as *mut *mut c_void as _,
-            );
-            println!("res = {:?}", res);
+            // let res = ffi::loadList(
+            //     file.as_ptr() as _,
+            //     symbol.as_ptr() as _,
+            //     &mut dyn_ptr as *mut *mut c_void as _,
+            // );
+            // println!("res = {:?}", res);
         };
         let mut dyn_list = HsList { ptr: dyn_ptr };
         println!(
