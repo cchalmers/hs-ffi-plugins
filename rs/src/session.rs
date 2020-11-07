@@ -6,9 +6,17 @@ pub struct Session {
 }
 
 impl Session {
-    pub fn new() -> Session {
+    pub fn new(lib: Option<&str>) -> Session {
+        let lib_cstr = lib.map(|str| { eprintln!("using lib {}", str); std::ffi::CString::new(str).expect("lib name")});
+        let lib_ptr = if let Some(cstr) = &lib_cstr {
+            eprintln!("using cstr {:?}", cstr);
+            cstr.as_ptr() as *mut _
+        } else {
+            std::ptr::null_mut()
+        };
+        eprintln!("lib cstr has addr {:p}", lib_ptr);
         Session {
-            ptr: unsafe { ffi::new_session() },
+            ptr: unsafe { ffi::new_session(lib_ptr) },
         }
     }
 
@@ -40,6 +48,12 @@ impl Session {
             Some(Dynamic { ptr: dyn_ptr })
         } else {
             None
+        }
+    }
+
+    pub fn debugging(&self) {
+        unsafe {
+            ffi::debugging(self.ptr)
         }
     }
 }

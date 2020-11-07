@@ -61,7 +61,7 @@ let nixpkgs = import sources.nixpkgs {};
     crateOverrides = nixpkgs.defaultCrateOverrides // {
       callback-rs = old: {
         LIBCLANG_PATH = "${nixpkgs.llvmPackages.libclang}/lib";
-        buildInputs = old.buildInputs or [] ++ [ hs-lib ];
+        buildInputs = old.buildInputs or [] ++ [ hs-lib haskellPackages.dyn2 ];
         nativeBuildInputs = [ nixpkgs.clang ];
       };
     };

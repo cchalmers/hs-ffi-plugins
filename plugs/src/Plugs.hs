@@ -45,6 +45,7 @@ unsafeNewSession = do
   let session = Session ref
   flip unGhc session $ GHC.initGhcMonad (Just libdir)
   linkInMemory session -- TEMP
+  GHC.load GHC.LoadAllTargets >>= liftIO . print -- TEMP
   pure session
 
 linkInMemory :: Session -> IO ()

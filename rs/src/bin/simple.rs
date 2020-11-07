@@ -9,7 +9,7 @@ fn main() {
         ffi::potatoInit();
     }
 
-    let session = session::Session::new();
+    let session = session::Session::new(Some("/nix/store/f7fn5bichmzpn39bglwsiijv569k4smr-ghc-8.6.5-with-packages/lib/ghc-8.6.5"));
     session.import_modules(&["Prelude"]);
     session.run_expr("head [1,2,3]");
     session.import_modules(&["Prelude", "Data.Word"]);
@@ -29,7 +29,27 @@ fn main() {
     } else {
         eprintln!("Was not successful");
     }
-    // session.run_expr("last [1..]");
+
+    session.debugging();
+    // from ghci: 
+// Prelude GHC System.Plugins.Export> map fst <$> ps
+// Just ["/nix/store/f7fn5bichmzpn39bglwsiijv569k4smr-ghc-8.6.5-with-packages/lib/ghc-8.6.5/package.conf.d"]
+
+    // from rust:
+    // the package database is Just
+    // ["/nix/store/wrghpsajnhd55blll01zw5wiw5vwar84-ghc-8.6.5/lib/ghc-8.6.5/package.conf.d"]
+
+    session.import_modules(&["Prelude", "Plug2"]);
+    if let Some(dynamic) = session.run_expr_dyn("myCoolList") {
+        eprintln!(
+            "the value is {:?}",
+            HsList::<u64>::from_dynamic(&dynamic)
+                .expect("wasn't a list")
+                .collect::<Vec<u64>>()
+        )
+    } else {
+        eprintln!("Was not successful");
+    }
 
     // let ptr = unsafe { dynamic::load_symbol("../dyn/Plug.so", "myCoolList") };
     // let list = unsafe { HsList::from_ptr(ptr) };

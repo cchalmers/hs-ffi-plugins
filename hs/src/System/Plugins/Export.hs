@@ -11,6 +11,7 @@
 {-# LANGUAGE UnboxedTuples            #-}
 module System.Plugins.Export where
 
+import Data.Maybe (fromMaybe)
 import           Control.Concurrent
 import           Control.Exception
 import           Control.Monad.IO.Class
@@ -52,6 +53,7 @@ import           Name
 import           Outputable             hiding ((<>))
 import           SysTools               (initLlvmConfig, initSysTools)
 import           TcRnMonad              (initTcRnIf)
+import qualified Packages
 
 -- foreign import ccall "dynamic" ioNext :: FunPtr (Ptr () -> IO Word64) -> Ptr () -> IO Word64
 -- foreign import ccall "dynamic" iofd :: FunPtr (Ptr () -> IO Bool) -> Ptr () -> IO Bool
@@ -239,17 +241,23 @@ foreign export ccall deref_int64 :: StablePtr Int64 -> IO Int64
 
 
 -- | Create a new initialised session.
-unsafeNewSession :: IO Session
-unsafeNewSession = do
+unsafeNewSession :: Maybe String -> IO Session
+unsafeNewSession lib = do
+  putStrLn $ "using lib " <> show lib
   ref <- newIORef (error "empty session")
   let session = Session ref
-  flip unGhc session $ GHC.initGhcMonad (Just libdir)
+  flip unGhc session $ GHC.initGhcMonad (Just $ fromMaybe libdir lib)
   linkInMemory session -- TEMP
   pure session
+
+sessionFlags :: Session -> IO GHC.DynFlags
+sessionFlags session = flip unGhc session $ do
+  GHC.getSessionDynFlags
 
 linkInMemory :: Session -> IO ()
 linkInMemory session = flip unGhc session $ do
   dflags <- GHC.getSessionDynFlags
+  liftIO $ Packages.initPackages dflags
   -- returns list of new packages that may need to be linked, unsure
   _ <- GHC.setSessionDynFlags dflags
     { DynFlags.hscTarget = DynFlags.HscAsm
@@ -274,7 +282,7 @@ cleanup session = flip unGhc session $ GHC.withCleanupSession (pure ())
 
 rrr :: String -> IO ()
 rrr expr = do
-  session <- unsafeNewSession
+  session <- unsafeNewSession Nothing
   importModules session ["Prelude", "Plug2"]
   res <- compExpr session expr
   either print (\val -> print (unsafeCoerce val :: [Int])) res
@@ -330,8 +338,13 @@ foreign export ccall dyn_val :: StablePtr Dynamic -> IO (StablePtr Any)
 
 -- ghc api -------------------------------------------------------------
 
-new_session :: IO (StablePtr Session)
-new_session = unsafeNewSession >>= newStablePtr
+new_session :: CString -> IO (StablePtr Session)
+new_session cstr = do
+  print cstr
+  str <- peekCString cstr
+  print str
+  lib >>= unsafeNewSession >>= newStablePtr
+  where lib = if cstr == nullPtr then pure Nothing else Just <$> (peekCString cstr)
 
 run_expr :: StablePtr Session -> CString -> IO ()
 run_expr ptr cexpr = do
@@ -364,8 +377,16 @@ import_modules ptr n cmods = do
   mods <- mapM (\n -> peekElemOff cmods n >>= peekCString) [0..n-1]
   importModules session mods
 
-foreign export ccall new_session :: IO (StablePtr Session)
+debugging :: StablePtr Session -> IO ()
+debugging ptr = do
+  session <- deRefStablePtr ptr
+  flags <- sessionFlags session
+  let pdb = GHC.pkgDatabase flags
+  putStrLn $ "the package database is " <> show (fmap (map fst) pdb)
+
+foreign export ccall new_session :: CString -> IO (StablePtr Session)
 foreign export ccall run_expr :: StablePtr Session -> CString -> IO ()
 foreign export ccall run_expr_dyn :: StablePtr Session -> CString -> Ptr (StablePtr Dynamic) -> IO Word64
 foreign export ccall cleanup_session :: StablePtr Session -> IO ()
 foreign export ccall import_modules :: StablePtr Session -> Int -> Ptr CString -> IO ()
+foreign export ccall debugging :: StablePtr Session -> IO ()
