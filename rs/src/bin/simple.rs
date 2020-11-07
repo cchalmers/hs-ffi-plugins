@@ -1,5 +1,6 @@
 use callback_rs::dynamic::Typeable;
 use callback_rs::ffi;
+use callback_rs::list::HsList;
 use callback_rs::session;
 // use callback_rs::list::HsList;
 
@@ -14,6 +15,17 @@ fn main() {
     session.import_modules(&["Prelude", "Data.Word"]);
     if let Some(dynamic) = session.run_expr_dyn("head [4,1,2,3] :: Word64") {
         eprintln!("the value is {:?}", u64::from_dynamic(&dynamic))
+    } else {
+        eprintln!("head [4,1,2,3]");
+    }
+
+    if let Some(dynamic) = session.run_expr_dyn("[4,1,2,3] :: [Word64]") {
+        eprintln!(
+            "the value is {:?}",
+            HsList::<u64>::from_dynamic(&dynamic)
+                .expect("wasn't a list")
+                .collect::<Vec<u64>>()
+        )
     } else {
         eprintln!("Was not successful");
     }

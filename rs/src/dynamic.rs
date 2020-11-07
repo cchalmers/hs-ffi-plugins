@@ -1,12 +1,29 @@
 use crate::ffi;
+use crate::list::HsList;
 
 pub struct Dynamic {
     pub ptr: ffi::HsStablePtr,
 }
 
+// impl Drop for Dynamic {
+//     fn drop(&mut self) {
+//         unsafe {
+//             // ffi::hs_free_stable_ptr(self.ptr)
+//         }
+//     }
+// }
+
 pub struct TypeRep {
     pub ptr: ffi::HsStablePtr,
 }
+
+// impl Drop for TypeRep {
+//     fn drop(&mut self) {
+//         unsafe {
+//             // ffi::hs_free_stable_ptr(self.ptr)
+//         }
+//     }
+// }
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct Fingerprint(pub u128);
@@ -65,6 +82,24 @@ impl Typeable for u64 {
     fn from_dynamic(dynamic: &Dynamic) -> Option<u64> {
         if dynamic.fingerprint() == Self::typerep().fingerprint() {
             unsafe { Some(ffi::deref_word64(dynamic.dynamic_value())) }
+        } else {
+            None
+        }
+    }
+}
+
+impl Typeable for HsList<u64> {
+    fn typerep() -> TypeRep {
+        u64::typerep().list_of()
+    }
+
+    fn from_dynamic(dynamic: &Dynamic) -> Option<HsList<u64>> {
+        if dynamic.fingerprint() == Self::typerep().fingerprint() {
+            unsafe {
+                Some(HsList::<u64>::from_ptr(ffi::mk_list_iter(
+                    dynamic.dynamic_value(),
+                )))
+            }
         } else {
             None
         }
