@@ -5,25 +5,25 @@ pub struct Dynamic {
     pub ptr: ffi::HsStablePtr,
 }
 
-// impl Drop for Dynamic {
-//     fn drop(&mut self) {
-//         unsafe {
-//             // ffi::hs_free_stable_ptr(self.ptr)
-//         }
-//     }
-// }
+impl Drop for Dynamic {
+    fn drop(&mut self) {
+        unsafe {
+            ffi::freeStable(self.ptr)
+        }
+    }
+}
 
 pub struct TypeRep {
     pub ptr: ffi::HsStablePtr,
 }
 
-// impl Drop for TypeRep {
-//     fn drop(&mut self) {
-//         unsafe {
-//             // ffi::hs_free_stable_ptr(self.ptr)
-//         }
-//     }
-// }
+impl Drop for TypeRep {
+    fn drop(&mut self) {
+        unsafe {
+            ffi::freeStable(self.ptr)
+        }
+    }
+}
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct Fingerprint(pub u128);
