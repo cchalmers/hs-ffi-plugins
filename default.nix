@@ -1,6 +1,30 @@
 { sources ? import nix/sources.nix {} }:
 
-let nixpkgs = import sources.nixpkgs {};
+let rust-channel-overlay = import sources.nixpkgs-mozilla;
+    rust-overlay = self: super:
+      let rust-stable = super.rustChannelOf {
+            channel = "1.47.0";
+            sha256 = "1hkisci4as93hx8ybf13bmxkj9jsvd4a9ilvjmw6n64w4jkc1nk9";
+          };
+          rust-nightly = super.rustChannelOf {
+            channel = "nightly";
+            date = "2020-11-03";
+            sha256 = "1w5mwfix9d3xvf5hllj3ahiysf22f17ml1m0bqhaz4ky1xchhb2a";
+          };
+          rust-channel = rust-stable;
+      in {
+        rustc = rust-channel.rust;
+        cargo = rust-channel.cargo;
+        cbindgen = self.callPackage rust/cbindgen.nix {};
+        crate2nix = self.callPackage rust/crate2nix.nix {};
+        cargo-edit = self.callPackage rust/cargo-edit.nix {};
+        rustPlatform = self.makeRustPlatform { rustc = self.rustc; cargo = self.cargo;};
+        rustfmt = rust-channel.rustfmt-preview;
+      };
+
+    nixpkgs = import sources.nixpkgs {
+      overlays = [ rust-channel-overlay rust-overlay ];
+    };
     haskellPackages = nixpkgs.haskell.packages.ghc865.override {
       overrides = self: super: {
         # plugins = nixpkgs.haskell.lib.markUnbroken super.plugins;
