@@ -71,7 +71,9 @@ let nixpkgs = import sources.nixpkgs {};
       (_: pkg: pkg.build.override { inherit crateOverrides; })
       crateNix.workspaceMembers;
 
+    example-env = haskellPackages.ghcWithPackages (p: with p; [ lens dyn2 ]);
+
     # crate2nix = import sources.crate2nix { pkgs = sources.nixpkgs; };
 
 # in  { inherit (haskellPackages) dyn2 plugs plugins; inherit crate2nix nixpkgs hs-lib hs-lib-hs; } // packages
-in  { inherit (haskellPackages) dyn2 plugs; inherit nixpkgs hs-lib hs-lib-hs; } // packages
+in  { inherit (haskellPackages) dyn2 plugs; inherit nixpkgs hs-lib hs-lib-hs example-env; } // packages

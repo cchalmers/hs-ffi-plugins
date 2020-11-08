@@ -9,7 +9,7 @@ fn main() {
         ffi::potatoInit();
     }
 
-    let session = session::Session::new(Some("/nix/store/f7fn5bichmzpn39bglwsiijv569k4smr-ghc-8.6.5-with-packages/lib/ghc-8.6.5"));
+    let session = session::Session::new(Some("/nix/store/zmhhyskxgwrf1sy0nk8c1di6yq0pmri2-ghc-8.6.5-with-packages/lib/ghc-8.6.5"));
     session.import_modules(&["Prelude"]);
     session.run_expr("head [1,2,3]");
     session.import_modules(&["Prelude", "Data.Word"]);
@@ -39,8 +39,19 @@ fn main() {
     // the package database is Just
     // ["/nix/store/wrghpsajnhd55blll01zw5wiw5vwar84-ghc-8.6.5/lib/ghc-8.6.5/package.conf.d"]
 
-    session.import_modules(&["Prelude", "Plug2"]);
+    session.import_modules(&["Prelude", "Plug2", "Control.Lens", "Data.Word"]);
     if let Some(dynamic) = session.run_expr_dyn("myCoolList") {
+        eprintln!(
+            "the value is {:?}",
+            HsList::<u64>::from_dynamic(&dynamic)
+                .expect("wasn't a list")
+                .collect::<Vec<u64>>()
+        )
+    } else {
+        eprintln!("Was not successful");
+    }
+
+    if let Some(dynamic) = session.run_expr_dyn("[1,2,3] & each +~ 1 :: [Word64]") {
         eprintln!(
             "the value is {:?}",
             HsList::<u64>::from_dynamic(&dynamic)
