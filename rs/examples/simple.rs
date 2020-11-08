@@ -2,7 +2,6 @@ use callback_rs::dynamic::Typeable;
 use callback_rs::ffi;
 use callback_rs::list::HsList;
 use callback_rs::session;
-// use callback_rs::list::HsList;
 use color_eyre::eyre::Result;
 
 use std::path::PathBuf;
@@ -45,13 +44,6 @@ fn main() -> Result<()> {
     }
 
     session.debugging();
-    // from ghci: 
-// Prelude GHC System.Plugins.Export> map fst <$> ps
-// Just ["/nix/store/f7fn5bichmzpn39bglwsiijv569k4smr-ghc-8.6.5-with-packages/lib/ghc-8.6.5/package.conf.d"]
-
-    // from rust:
-    // the package database is Just
-    // ["/nix/store/wrghpsajnhd55blll01zw5wiw5vwar84-ghc-8.6.5/lib/ghc-8.6.5/package.conf.d"]
 
     session.import_modules(&["Prelude", "Plug2", "Control.Lens", "Data.Word"]);
     if let Some(dynamic) = session.run_expr_dyn("myCoolList") {
@@ -76,12 +68,5 @@ fn main() -> Result<()> {
         eprintln!("Was not successful");
     }
 
-    // let ptr = unsafe { dynamic::load_symbol("../dyn/Plug.so", "myCoolList") };
-    // let list = unsafe { HsList::from_ptr(ptr) };
-    // eprintln!("made the list");
-    // list.for_each(|x| eprintln!("x = {}", x));
-    // let ptr = unsafe { dynamic::load_symbol("../dyn2/Plug2.o", "myCoolList") };
-    // let list = unsafe { HsList::from_ptr(ptr) };
-    // list.for_each(|x| eprintln!("y = {}", x));
     Ok(())
 }
