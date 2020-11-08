@@ -53,6 +53,31 @@ impl Session {
         }
     }
 
+    /// These are the `-i` arguments normally given to the cmdline.
+    pub fn set_import_paths(&self, imports: &[&str]) -> bool {
+        let cstrs: Vec<_> = imports
+            .iter()
+            .map(|&nm| std::ffi::CString::new(nm).expect("module_name"))
+            .collect();
+        let cstr_ptrs: Vec<_> = cstrs.iter().map(|cstr| cstr.as_ptr()).collect();
+        unsafe { ffi::set_import_paths(self.ptr, cstrs.len() as i64, cstr_ptrs.as_ptr() as *mut _) };
+        true // fixme
+    }
+
+    /// Just like `:load`ing stuff.
+    pub fn set_load_paths(&self, module_paths: &[&str]) -> bool {
+        let cstrs: Vec<_> = module_paths
+            .iter()
+            .map(|&nm| std::ffi::CString::new(nm).expect("module_name"))
+            .collect();
+        let cstr_ptrs: Vec<_> = cstrs.iter().map(|cstr| cstr.as_ptr()).collect();
+        unsafe { ffi::load_modules(self.ptr, cstrs.len() as i64, cstr_ptrs.as_ptr() as *mut _) };
+        true // fixme
+    }
+
+// foreign export ccall load_modules :: StablePtr Session -> Int -> Ptr CString -> IO Word64
+// foreign export ccall set_import_paths :: StablePtr Session -> Int -> Ptr CString -> IO ()
+
     pub fn debugging(&self) {
         unsafe {
             ffi::debugging(self.ptr)

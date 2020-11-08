@@ -68,5 +68,20 @@ fn main() -> Result<()> {
         eprintln!("Was not successful");
     }
 
+    if !session.set_load_paths(&["examples/test.hs"]) {
+        panic!("OH NO")
+    }
+
+    if let Some(dynamic) = session.run_expr_dyn("myCoolerList") {
+        eprintln!(
+            "the value is {:?}",
+            HsList::<u64>::from_dynamic(&dynamic)
+                .expect("wasn't a list")
+                .collect::<Vec<u64>>()
+        )
+    } else {
+        eprintln!("Was not successful");
+    }
+
     Ok(())
 }

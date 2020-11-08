@@ -8,6 +8,7 @@
 {-# LANGUAGE ScopedTypeVariables      #-}
 {-# LANGUAGE TemplateHaskell          #-}
 {-# LANGUAGE TypeApplications         #-}
+{-# LANGUAGE TupleSections            #-}
 {-# LANGUAGE UnboxedTuples            #-}
 module System.Plugins.Export where
 
@@ -366,6 +367,33 @@ run_expr_dyn ptr cexpr ptrPtr = do
       print err
       pure 0
 
+-- | The import paths are usually done from -i arguments on the cmdline.
+set_import_paths :: StablePtr Session -> Int -> Ptr CString -> IO ()
+set_import_paths ptr n importsPtr = do
+  session <- deRefStablePtr ptr
+  imports <- mapM (\n -> peekElemOff importsPtr n >>= peekCString) [0..n-1]
+  flip unGhc session $ do
+    dflags <- DynFlags.getDynFlags
+    GHC.setInteractiveDynFlags dflags { GHC.importPaths = imports }
+
+load_modules :: StablePtr Session -> Int -> Ptr CString -> IO Word64
+load_modules ptr n modulesPtr = do
+  session <- deRefStablePtr ptr
+  modules <- mapM (\n -> peekElemOff modulesPtr n >>= peekCString) [0..n-1]
+  flip unGhc session $ loadModules' (map (,Nothing) modules)
+
+-- | taken from GHCi.UI
+loadModules' :: [(FilePath, Maybe GHC.Phase)] -> Ghc Word64
+loadModules' files = do
+  targets <- mapM (uncurry GHC.guessTarget) files
+  hsc_env <- GHC.getSession
+  _ <- GHC.abandonAll
+  GHC.setTargets []
+  _ <- GHC.load GHC.LoadAllTargets
+  GHC.setTargets targets
+  success <- GHC.load GHC.LoadAllTargets
+  pure $ case success of GHC.Succeeded -> 1; GHC.Failed -> 0
+
 cleanup_session :: StablePtr Session -> IO ()
 cleanup_session ptr = do
   sess <- deRefStablePtr ptr
@@ -390,3 +418,5 @@ foreign export ccall run_expr_dyn :: StablePtr Session -> CString -> Ptr (Stable
 foreign export ccall cleanup_session :: StablePtr Session -> IO ()
 foreign export ccall import_modules :: StablePtr Session -> Int -> Ptr CString -> IO ()
 foreign export ccall debugging :: StablePtr Session -> IO ()
+foreign export ccall load_modules :: StablePtr Session -> Int -> Ptr CString -> IO Word64
+foreign export ccall set_import_paths :: StablePtr Session -> Int -> Ptr CString -> IO ()
