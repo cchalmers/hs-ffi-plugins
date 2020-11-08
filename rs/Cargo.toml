@@ -8,3 +8,6 @@ edition = "2018"
 
 [build-dependencies]
 bindgen = "0.54"
+
+[dev-dependencies]
+color-eyre = "0.5.7"

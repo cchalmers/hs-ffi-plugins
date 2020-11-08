@@ -3,8 +3,9 @@ use callback_rs::ffi;
 use callback_rs::list::HsList;
 use callback_rs::session;
 // use callback_rs::list::HsList;
+use color_eyre::eyre::Result;
 
-fn main() {
+fn main() -> Result<()> {
     unsafe {
         ffi::potatoInit();
     }
@@ -69,4 +70,5 @@ fn main() {
     // let ptr = unsafe { dynamic::load_symbol("../dyn2/Plug2.o", "myCoolList") };
     // let list = unsafe { HsList::from_ptr(ptr) };
     // list.for_each(|x| eprintln!("y = {}", x));
+    Ok(())
 }
