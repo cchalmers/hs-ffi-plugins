@@ -4,10 +4,9 @@ version = "0.1.0"
 authors = ["Christopher Chalmers <c.chalmers@me.com>"]
 edition = "2018"
 
-[dependencies]
-
 [build-dependencies]
 bindgen = "0.54"
 
 [dev-dependencies]
 color-eyre = "0.5.7"
+structopt = "0.3.20"

@@ -15,11 +15,9 @@ let rust-channel-overlay = import sources.nixpkgs-mozilla;
       in {
         rustc = rust-channel.rust;
         cargo = rust-channel.cargo;
-        cbindgen = self.callPackage rust/cbindgen.nix {};
-        crate2nix = self.callPackage rust/crate2nix.nix {};
-        cargo-edit = self.callPackage rust/cargo-edit.nix {};
         rustPlatform = self.makeRustPlatform { rustc = self.rustc; cargo = self.cargo;};
         rustfmt = rust-channel.rustfmt-preview;
+        crate2nix =  self.callPackage sources.crate2nix {};
       };
 
     nixpkgs = import sources.nixpkgs {
@@ -80,24 +78,19 @@ let rust-channel-overlay = import sources.nixpkgs-mozilla;
               [ "cabal.project.local" ".ghc.environment." ]
         ) src;
 
-    crateNix = nixpkgs.callPackage ./rs/Cargo.nix {};
-
     crateOverrides = nixpkgs.defaultCrateOverrides // {
       callback-rs = old: {
         LIBCLANG_PATH = "${nixpkgs.llvmPackages.libclang}/lib";
-        buildInputs = old.buildInputs or [] ++ [ hs-lib haskellPackages.dyn2 ];
+        buildInputs = old.buildInputs or [] ++ [ hs-lib ];
         nativeBuildInputs = [ nixpkgs.clang ];
       };
     };
 
+    crateNix = nixpkgs.callPackage ./rs/Cargo.nix { defaultCrateOverrides = crateOverrides; };
+
     # The packages of this workspace with our crateOverrides
-    packages = lib.mapAttrs
-      (_: pkg: pkg.build.override { inherit crateOverrides; })
-      crateNix.workspaceMembers;
+    packages = lib.mapAttrs (_: pkg: pkg.build) crateNix.workspaceMembers;
 
     example-env = haskellPackages.ghcWithPackages (p: with p; [ lens dyn2 ]);
 
-    # crate2nix = import sources.crate2nix { pkgs = sources.nixpkgs; };
-
-# in  { inherit (haskellPackages) dyn2 plugs plugins; inherit crate2nix nixpkgs hs-lib hs-lib-hs; } // packages
 in  { inherit (haskellPackages) dyn2 plugs; inherit nixpkgs hs-lib hs-lib-hs example-env; } // packages
