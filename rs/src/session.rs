@@ -1,20 +1,22 @@
 use crate::dynamic::Dynamic;
 use crate::ffi;
+use std::path::Path;
+use std::ffi::CString;
 
 pub struct Session {
     ptr: ffi::HsStablePtr,
 }
 
 impl Session {
-    pub fn new(lib: Option<&str>) -> Session {
-        let lib_cstr = lib.map(|str| { eprintln!("using lib {}", str); std::ffi::CString::new(str).expect("lib name")});
+    pub fn new<P: AsRef<Path>>(lib: Option<P>) -> Session {
+        let lib_cstr = lib.map(|path| {
+            CString::new(path.as_ref().to_str().expect("libpath not utf8")).expect("lib name")
+        });
         let lib_ptr = if let Some(cstr) = &lib_cstr {
-            eprintln!("using cstr {:?}", cstr);
             cstr.as_ptr() as *mut _
         } else {
             std::ptr::null_mut()
         };
-        eprintln!("lib cstr has addr {:p}", lib_ptr);
         Session {
             ptr: unsafe { ffi::new_session(lib_ptr) },
         }

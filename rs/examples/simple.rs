@@ -5,12 +5,25 @@ use callback_rs::session;
 // use callback_rs::list::HsList;
 use color_eyre::eyre::Result;
 
+use std::path::PathBuf;
+use structopt::StructOpt;
+
+/// A basic example
+#[derive(StructOpt, Debug)]
+#[structopt(name = "basic")]
+struct Opt {
+    libdir: PathBuf,
+}
+
 fn main() -> Result<()> {
     unsafe {
         ffi::potatoInit();
     }
 
-    let session = session::Session::new(Some("/nix/store/zmhhyskxgwrf1sy0nk8c1di6yq0pmri2-ghc-8.6.5-with-packages/lib/ghc-8.6.5"));
+    let opt = Opt::from_args();
+
+    let session = session::Session::new(Some(&opt.libdir));
+
     session.import_modules(&["Prelude"]);
     session.run_expr("head [1,2,3]");
     session.import_modules(&["Prelude", "Data.Word"]);
