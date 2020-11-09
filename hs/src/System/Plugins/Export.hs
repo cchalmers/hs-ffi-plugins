@@ -7,19 +7,21 @@
 {-# LANGUAGE MagicHash                #-}
 {-# LANGUAGE ScopedTypeVariables      #-}
 {-# LANGUAGE TemplateHaskell          #-}
-{-# LANGUAGE TypeApplications         #-}
 {-# LANGUAGE TupleSections            #-}
+{-# LANGUAGE TypeApplications         #-}
 {-# LANGUAGE UnboxedTuples            #-}
 module System.Plugins.Export where
 
-import Data.Maybe (fromMaybe)
 import           Control.Concurrent
 import           Control.Exception
+import           Control.Monad          (filterM)
 import           Control.Monad.IO.Class
 import qualified Data.Data              as Data
 import           Data.Dynamic
+import           Data.Graph             (flattenSCCs)
 import           Data.IORef
 import           Data.Kind              (Type)
+import           Data.Maybe             (fromMaybe)
 import           Data.Typeable          (Proxy (..), typeRepFingerprint)
 import           Data.Word
 import           Foreign
@@ -52,9 +54,9 @@ import           Module
 import           Module                 (moduleName, moduleNameString)
 import           Name
 import           Outputable             hiding ((<>))
+import qualified Packages
 import           SysTools               (initLlvmConfig, initSysTools)
 import           TcRnMonad              (initTcRnIf)
-import qualified Packages
 
 -- foreign import ccall "dynamic" ioNext :: FunPtr (Ptr () -> IO Word64) -> Ptr () -> IO Word64
 -- foreign import ccall "dynamic" iofd :: FunPtr (Ptr () -> IO Bool) -> Ptr () -> IO Bool
@@ -260,10 +262,20 @@ linkInMemory session = flip unGhc session $ do
   dflags <- GHC.getSessionDynFlags
   liftIO $ Packages.initPackages dflags
   -- returns list of new packages that may need to be linked, unsure
-  _ <- GHC.setSessionDynFlags dflags
-    { DynFlags.hscTarget = DynFlags.HscAsm
-    , DynFlags.ghcLink   = DynFlags.LinkInMemory
-    }
+  let dflags3 = dflags
+        { DynFlags.hscTarget = DynFlags.HscInterpreted -- HscAsm
+        , DynFlags.ghcMode   = DynFlags.CompManager
+        , DynFlags.ghcLink   = DynFlags.LinkInMemory
+        }
+      platform = DynFlags.targetPlatform dflags3
+      dflags3a = DynFlags.updateWays $ dflags3 { GHC.ways = DynFlags.interpWays }
+      dflags3b = foldl DynFlags.gopt_set dflags3a
+                $ concatMap (DynFlags.wayGeneralFlags platform)
+                            DynFlags.interpWays
+      dflags3c = foldl DynFlags.gopt_unset dflags3b
+                $ concatMap (DynFlags.wayUnsetGeneralFlags platform)
+                            DynFlags.interpWays
+  _ <- GHC.setSessionDynFlags dflags3c
   pure ()
 
 importModules :: Session -> [String] -> IO ()
@@ -273,6 +285,18 @@ importModules session modules = flip unGhc session $ do
 compExpr :: Session -> String -> IO (Either GHCi.SerializableException GHC.HValue)
 compExpr session expr = tryJust (Just . GHCi.toSerializableException) $ flip unGhc session $ do
   GHC.compileExpr expr
+
+
+runExpr :: Session -> String -> IO GHC.ExecResult
+runExpr session expr = flip unGhc session $
+    -- let opts = GHC.execOptions
+    --               { GHC.execSourceFile = "INTERACTIVE"
+    --               , GHC.execLineNumber = 71273
+    --               , GHC.execSingleStep = RunToCompletion
+    --               , GHC.execWrap = \fhv -> EvalApp (EvalThis (evalWrapper st))
+    --                                                (EvalThis fhv) }
+    GHC.execStmt expr GHC.execOptions
+
 
 compExprDyn :: Session -> String -> IO (Either GHCi.SerializableException Dynamic)
 compExprDyn session expr = tryJust (Just . GHCi.toSerializableException) $ flip unGhc session $ do
@@ -287,7 +311,13 @@ rrr expr = do
   importModules session ["Prelude", "Plug2"]
   res <- compExpr session expr
   either print (\val -> print (unsafeCoerce val :: [Int])) res
-  -- print is
+
+  importModules session ["Prelude"]
+  flip unGhc session $ loadModules [("/home/chris/Documents/hs-ffi-plugins/rs/examples/test.hs", Nothing)]
+  putStrLn "Loaded the modules"
+  _res <- runExpr session "myCoolerList"
+  -- either print (\val -> print (unsafeCoerce val :: [Int])) res
+
   cleanup session
 
 -- typereps ------------------------------------------------------------
@@ -380,11 +410,13 @@ load_modules :: StablePtr Session -> Int -> Ptr CString -> IO Word64
 load_modules ptr n modulesPtr = do
   session <- deRefStablePtr ptr
   modules <- mapM (\n -> peekElemOff modulesPtr n >>= peekCString) [0..n-1]
-  flip unGhc session $ loadModules' (map (,Nothing) modules)
+  flip unGhc session $ do
+    success <- loadModules (map (,Nothing) modules)
+    pure success
 
 -- | taken from GHCi.UI
-loadModules' :: [(FilePath, Maybe GHC.Phase)] -> Ghc Word64
-loadModules' files = do
+loadModules :: [(FilePath, Maybe GHC.Phase)] -> Ghc Word64
+loadModules files = do
   targets <- mapM (uncurry GHC.guessTarget) files
   hsc_env <- GHC.getSession
   _ <- GHC.abandonAll
@@ -392,7 +424,81 @@ loadModules' files = do
   _ <- GHC.load GHC.LoadAllTargets
   GHC.setTargets targets
   success <- GHC.load GHC.LoadAllTargets
+
+  loaded_mods <- getLoadedModules
+  -- -- modulesLoadedMsg ok loaded_mods
+  let retain_context = False
+  liftIO $ putStrLn $ "There are " <> show (length loaded_mods) <> " loaded modules"
+  liftIO $ print $ map (moduleNameString . ms_mod_name) loaded_mods
+  setContextAfterLoad retain_context loaded_mods
   pure $ case success of GHC.Succeeded -> 1; GHC.Failed -> 0
+
+setContextAfterLoad :: Bool -> [GHC.ModSummary] -> Ghc ()
+setContextAfterLoad keep_ctxt [] = do
+  -- setContextKeepingPackageModules keep_ctxt []
+  pure ()
+setContextAfterLoad keep_ctxt ms = do
+  -- load a target if one is available, otherwise load the topmost module.
+  targets <- GHC.getTargets
+  case [ m | Just m <- map (findTarget ms) targets ] of
+        []    ->
+          let graph = GHC.mkModuleGraph ms
+              graph' = flattenSCCs (GHC.topSortModuleGraph True graph Nothing)
+          in load_this (last graph')
+        (m:_) ->
+          load_this m
+ where
+   findTarget mds t
+    = case filter (`matches` t) mds of
+        []    -> Nothing
+        (m:_) -> Just m
+
+   summary `matches` Target (TargetModule m) _ _
+        = GHC.ms_mod_name summary == m
+   summary `matches` Target (TargetFile f _) _ _
+        | Just f' <- GHC.ml_hs_file (GHC.ms_location summary)   = f == f'
+   _ `matches` _
+        = False
+
+   load_this summary | m <- GHC.ms_mod summary = do
+        is_interp <- GHC.moduleIsInterpreted m
+        dflags <- DynFlags.getDynFlags
+        let star_ok = is_interp && not (DynFlags.safeLanguageOn dflags)
+              -- We import the module with a * iff
+              --   - it is interpreted, and
+              --   - -XSafe is off (it doesn't allow *-imports)
+        let new_ctx | star_ok   = [mkIIModule (GHC.moduleName m)]
+                    | otherwise = [mkIIDecl   (GHC.moduleName m)]
+        -- setContextKeepingPackageModules keep_ctxt new_ctx
+        GHC.setContext new_ctx
+
+-- -- | Keep any package modules (except Prelude) when changing the context.
+-- setContextKeepingPackageModules
+--         :: Bool                 -- True  <=> keep all of remembered_ctx
+--                                 -- False <=> just keep package imports
+--         -> [InteractiveImport]  -- new context
+--         -> Ghc ()
+
+-- setContextKeepingPackageModules keep_ctx trans_ctx = do
+
+--   st <- getGHCiState
+--   let rem_ctx = remembered_ctx st
+--   new_rem_ctx <- if keep_ctx then return rem_ctx
+--                              else keepPackageImports rem_ctx
+  -- setGHCiState st{ remembered_ctx = new_rem_ctx,
+  --                  transient_ctx  = filterSubsumed new_rem_ctx trans_ctx }
+  -- setGHCContextFromGHCiState
+
+mkIIModule :: ModuleName -> InteractiveImport
+mkIIModule = IIModule
+
+mkIIDecl :: ModuleName -> InteractiveImport
+mkIIDecl = IIDecl . GHC.simpleImportDecl
+
+getLoadedModules :: GHC.GhcMonad m => m [GHC.ModSummary]
+getLoadedModules = do
+  graph <- GHC.getModuleGraph
+  filterM (GHC.isLoaded . GHC.ms_mod_name) (GHC.mgModSummaries graph)
 
 cleanup_session :: StablePtr Session -> IO ()
 cleanup_session ptr = do
