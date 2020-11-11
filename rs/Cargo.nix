@@ -378,6 +378,12 @@ rec {
         authors = [
           "Christopher Chalmers <c.chalmers@me.com>"
         ];
+        dependencies = [
+          {
+            name = "thiserror";
+            packageId = "thiserror";
+          }
+        ];
         buildDependencies = [
           {
             name = "bindgen";
@@ -1153,9 +1159,9 @@ rec {
       };
       "proc-macro2" = rec {
         crateName = "proc-macro2";
-        version = "1.0.18";
+        version = "1.0.24";
         edition = "2018";
-        sha256 = "1yn8szcbnm9j2sw427vpf603xjg6v27hfny40ifzdc8nm0qn7bmy";
+        sha256 = "0wcabxzrddcjmryndw8fpyxcq6rw63m701vx86xxf03y3bp081qy";
         authors = [
           "Alex Crichton <alex@alexcrichton.com>"
           "David Tolnay <dtolnay@gmail.com>"
@@ -1564,9 +1570,9 @@ rec {
       };
       "syn" = rec {
         crateName = "syn";
-        version = "1.0.41";
+        version = "1.0.48";
         edition = "2018";
-        sha256 = "0aw4rkym5pw00ss9limqgx7hbpr8zn4b3hy63na4nl4jyvly7436";
+        sha256 = "1b0rdf7rvgc8am2n36yi8wys7kpdg8ly9891l917yizwxzzildyc";
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
         ];
@@ -1624,6 +1630,47 @@ rec {
           {
             name = "unicode-width";
             packageId = "unicode-width";
+          }
+        ];
+        
+      };
+      "thiserror" = rec {
+        crateName = "thiserror";
+        version = "1.0.22";
+        edition = "2018";
+        sha256 = "0gp5wp7izpv9rdvq035ajbxcl3g0vck61pg9y6mfsvk1hi5y76hf";
+        authors = [
+          "David Tolnay <dtolnay@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "thiserror-impl";
+            packageId = "thiserror-impl";
+          }
+        ];
+        
+      };
+      "thiserror-impl" = rec {
+        crateName = "thiserror-impl";
+        version = "1.0.22";
+        edition = "2018";
+        sha256 = "0mnx51374c69l1w7gh98prn2wzm2yvmlll4ms567a42vx0ihz8lv";
+        procMacro = true;
+        authors = [
+          "David Tolnay <dtolnay@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "proc-macro2";
+            packageId = "proc-macro2";
+          }
+          {
+            name = "quote";
+            packageId = "quote";
+          }
+          {
+            name = "syn";
+            packageId = "syn";
           }
         ];
         

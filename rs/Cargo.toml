@@ -4,6 +4,9 @@ version = "0.1.0"
 authors = ["Christopher Chalmers <c.chalmers@me.com>"]
 edition = "2018"
 
+[dependencies]
+thiserror = "1.0.22"
+
 [build-dependencies]
 bindgen = "0.54"
 

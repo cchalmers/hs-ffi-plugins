@@ -2,26 +2,22 @@ use crate::dynamic::Dynamic;
 use crate::ffi;
 use std::ffi::CString;
 use std::path::Path;
+use thiserror::Error;
 
 pub struct Session {
     ptr: ffi::HsStablePtr,
 }
 
 /// An error from running a haskell evaluation.
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum EvalError {
+    #[error("interrupted")]
     Interrupt,
+    #[error("exit_code({0})")]
     ExitCode(i32),
+    #[error("{0}")]
     Msg(String),
 }
-
-impl std::fmt::Display for EvalError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "SuperError is here!")
-    }
-}
-
-impl std::error::Error for EvalError {}
 
 impl Session {
     pub fn new<P: AsRef<Path>>(lib: Option<P>) -> Session {
