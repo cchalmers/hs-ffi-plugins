@@ -83,5 +83,35 @@ fn main() -> Result<()> {
         eprintln!("Was not successful");
     }
 
+    session.set_import_paths(&["/home/chris/Documents/hs-ffi-plugins/interpret-me"]);
+    // TODO work out how to load modules in include path without having to set a load path that
+    // imports them
+    if !session.set_load_paths(&["examples/include-stuff.hs"]) {
+        panic!("OH NO")
+    }
+    session.import_modules(&["Prelude", "Blah", "Blah.Inner"]);
+
+    if let Some(dynamic) = session.run_expr_dyn("blah") {
+        eprintln!(
+            "the value is {:?}",
+            HsList::<u64>::from_dynamic(&dynamic)
+                .expect("wasn't a list")
+                .collect::<Vec<u64>>()
+        )
+    } else {
+        eprintln!("Was not successful");
+    }
+
+    if let Some(dynamic) = session.run_expr_dyn("blahInner") {
+        eprintln!(
+            "the value is {:?}",
+            HsList::<u64>::from_dynamic(&dynamic)
+                .expect("wasn't a list")
+                .collect::<Vec<u64>>()
+        )
+    } else {
+        eprintln!("Was not successful");
+    }
+
     Ok(())
 }

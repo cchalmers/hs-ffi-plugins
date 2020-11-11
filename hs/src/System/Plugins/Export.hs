@@ -377,6 +377,14 @@ new_session cstr = do
   lib >>= unsafeNewSession >>= newStablePtr
   where lib = if cstr == nullPtr then pure Nothing else Just <$> (peekCString cstr)
 
+set_verbosity :: StablePtr Session -> Int -> IO ()
+set_verbosity ptr verbosity = do
+  session <- deRefStablePtr ptr
+  flip unGhc session $ do
+    dflags <- DynFlags.getDynFlags
+    _ <- GHC.setSessionDynFlags dflags { GHC.verbosity = verbosity }
+    pure ()
+
 run_expr :: StablePtr Session -> CString -> IO ()
 run_expr ptr cexpr = do
   session <- deRefStablePtr ptr
@@ -404,7 +412,8 @@ set_import_paths ptr n importsPtr = do
   imports <- mapM (\n -> peekElemOff importsPtr n >>= peekCString) [0..n-1]
   flip unGhc session $ do
     dflags <- DynFlags.getDynFlags
-    GHC.setInteractiveDynFlags dflags { GHC.importPaths = imports }
+    _ <- GHC.setSessionDynFlags dflags { GHC.importPaths = imports }
+    pure ()
 
 load_modules :: StablePtr Session -> Int -> Ptr CString -> IO Word64
 load_modules ptr n modulesPtr = do
@@ -519,6 +528,7 @@ debugging ptr = do
   putStrLn $ "the package database is " <> show (fmap (map fst) pdb)
 
 foreign export ccall new_session :: CString -> IO (StablePtr Session)
+foreign export ccall set_verbosity :: StablePtr Session -> Int -> IO ()
 foreign export ccall run_expr :: StablePtr Session -> CString -> IO ()
 foreign export ccall run_expr_dyn :: StablePtr Session -> CString -> Ptr (StablePtr Dynamic) -> IO Word64
 foreign export ccall cleanup_session :: StablePtr Session -> IO ()

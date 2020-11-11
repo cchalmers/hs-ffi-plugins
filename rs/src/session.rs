@@ -22,6 +22,10 @@ impl Session {
         }
     }
 
+    pub fn set_verbosity(&self, verbosity: usize) {
+        unsafe { ffi::set_verbosity(self.ptr, verbosity as _) }
+    }
+
     pub fn import_modules(&self, module_names: &[&str]) {
         let cstrs: Vec<_> = module_names
             .iter()
