@@ -1,11 +1,27 @@
 use crate::dynamic::Dynamic;
 use crate::ffi;
-use std::path::Path;
 use std::ffi::CString;
+use std::path::Path;
 
 pub struct Session {
     ptr: ffi::HsStablePtr,
 }
+
+/// An error from running a haskell evaluation.
+#[derive(Debug)]
+pub enum EvalError {
+    Interrupt,
+    ExitCode(i32),
+    Msg(String),
+}
+
+impl std::fmt::Display for EvalError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "SuperError is here!")
+    }
+}
+
+impl std::error::Error for EvalError {}
 
 impl Session {
     pub fn new<P: AsRef<Path>>(lib: Option<P>) -> Session {
@@ -40,7 +56,7 @@ impl Session {
         unsafe { ffi::run_expr(self.ptr, cstr.as_ptr() as *mut _) }
     }
 
-    pub fn run_expr_dyn(&self, expr: &str) -> Option<Dynamic> {
+    pub fn run_expr_dyn(&self, expr: &str) -> Result<Dynamic, EvalError> {
         let cstr = std::ffi::CString::new(expr).expect("module_name");
         let mut dyn_ptr = std::ptr::null_mut();
         let success = unsafe {
@@ -51,9 +67,9 @@ impl Session {
             )
         };
         if success == 1 {
-            Some(Dynamic { ptr: dyn_ptr })
+            Ok(Dynamic { ptr: dyn_ptr })
         } else {
-            None
+            Err(EvalError::ExitCode(3))
         }
     }
 
@@ -64,7 +80,9 @@ impl Session {
             .map(|&nm| std::ffi::CString::new(nm).expect("module_name"))
             .collect();
         let cstr_ptrs: Vec<_> = cstrs.iter().map(|cstr| cstr.as_ptr()).collect();
-        unsafe { ffi::set_import_paths(self.ptr, cstrs.len() as i64, cstr_ptrs.as_ptr() as *mut _) };
+        unsafe {
+            ffi::set_import_paths(self.ptr, cstrs.len() as i64, cstr_ptrs.as_ptr() as *mut _)
+        };
         true // fixme
     }
 
@@ -79,13 +97,11 @@ impl Session {
         true // fixme
     }
 
-// foreign export ccall load_modules :: StablePtr Session -> Int -> Ptr CString -> IO Word64
-// foreign export ccall set_import_paths :: StablePtr Session -> Int -> Ptr CString -> IO ()
+    // foreign export ccall load_modules :: StablePtr Session -> Int -> Ptr CString -> IO Word64
+    // foreign export ccall set_import_paths :: StablePtr Session -> Int -> Ptr CString -> IO ()
 
     pub fn debugging(&self) {
-        unsafe {
-            ffi::debugging(self.ptr)
-        }
+        unsafe { ffi::debugging(self.ptr) }
     }
 }
 

@@ -7,9 +7,7 @@ pub struct Dynamic {
 
 impl Drop for Dynamic {
     fn drop(&mut self) {
-        unsafe {
-            ffi::freeStable(self.ptr)
-        }
+        unsafe { ffi::freeStable(self.ptr) }
     }
 }
 
@@ -19,9 +17,7 @@ pub struct TypeRep {
 
 impl Drop for TypeRep {
     fn drop(&mut self) {
-        unsafe {
-            ffi::freeStable(self.ptr)
-        }
+        unsafe { ffi::freeStable(self.ptr) }
     }
 }
 
