@@ -186,6 +186,8 @@ foreignListRefI16 :: ForeignListType Int16
 foreignListRefI16 = foreignListRef
 foreignListRefI8  :: ForeignListType Int8
 foreignListRefI8  = foreignListRef
+foreignListRefChar  :: ForeignListType Char
+foreignListRefChar  = foreignListRef
 
 foreign export ccall foreignListRefU64 :: ForeignListType Word64
 foreign export ccall foreignListRefU32 :: ForeignListType Word32
@@ -195,6 +197,7 @@ foreign export ccall foreignListRefI64 :: ForeignListType Int64
 foreign export ccall foreignListRefI32 :: ForeignListType Int32
 foreign export ccall foreignListRefI16 :: ForeignListType Int16
 foreign export ccall foreignListRefI8  :: ForeignListType Int8
+foreign export ccall foreignListRefChar  :: ForeignListType Char
 -- foreign export ccall foreignListRefU8 :: ForeignListType Bool
 
 -- nextList8 :: StablePtr (IORef [Word8]) -> Ptr Word8 -> IO Bool
@@ -208,6 +211,8 @@ nextList32 :: StablePtr (IORef [Word32]) -> Ptr Word32 -> IO Bool
 nextList32 = nextList
 nextList64 :: StablePtr (IORef [Word64]) -> Ptr Word64 -> IO Bool
 nextList64 = nextList
+nextListChar :: StablePtr (IORef [Char]) -> Ptr Char -> IO Bool
+nextListChar = nextList
 -- nextListBool :: StablePtr (IORef [Bool]) -> Ptr Bool -> IO Bool
 -- nextListBool = nextList
 
@@ -228,6 +233,7 @@ foreign export ccall nextList8 :: StablePtr (IORef [Word8]) -> Ptr Word8 -> IO B
 foreign export ccall nextList16 :: StablePtr (IORef [Word16]) -> Ptr Word16 -> IO Bool
 foreign export ccall nextList32 :: StablePtr (IORef [Word32]) -> Ptr Word32 -> IO Bool
 foreign export ccall nextList64 :: StablePtr (IORef [Word64]) -> Ptr Word64 -> IO Bool
+foreign export ccall nextListChar :: StablePtr (IORef [Char]) -> Ptr Char -> IO Bool
 
 foreign export ccall loadloadload :: IO ()
 
@@ -334,6 +340,9 @@ int64_type_rep = newStablePtr $ someTypeRep (Proxy @Int64)
 word64_type_rep :: IO (StablePtr SomeTypeRep)
 word64_type_rep = newStablePtr $ someTypeRep (Proxy @Word64)
 
+char_type_rep :: IO (StablePtr SomeTypeRep)
+char_type_rep = newStablePtr $ someTypeRep (Proxy @Char)
+
 list_type_rep :: StablePtr SomeTypeRep -> IO (StablePtr SomeTypeRep)
 list_type_rep aTyPtr = do
   SomeTypeRep (aTy :: TypeRep a) <- deRefStablePtr aTyPtr
@@ -362,6 +371,7 @@ foreign export ccall int_type_rep :: IO (StablePtr SomeTypeRep)
 foreign export ccall word_type_rep :: IO (StablePtr SomeTypeRep)
 foreign export ccall int64_type_rep :: IO (StablePtr SomeTypeRep)
 foreign export ccall word64_type_rep :: IO (StablePtr SomeTypeRep)
+foreign export ccall char_type_rep :: IO (StablePtr SomeTypeRep)
 foreign export ccall list_type_rep :: StablePtr SomeTypeRep -> IO (StablePtr SomeTypeRep)
 foreign export ccall type_rep_fingerprint :: StablePtr SomeTypeRep -> Ptr Word64 -> Ptr Word64 -> IO ()
 foreign export ccall dyn_type_rep :: StablePtr Dynamic -> IO (StablePtr SomeTypeRep)
@@ -393,17 +403,25 @@ run_expr ptr cexpr = do
     Right io -> unsafeCoerce io
     Left err -> print err
 
-run_expr_dyn :: StablePtr Session -> CString -> Ptr (StablePtr Dynamic) -> IO Word64
+run_expr_dyn
+  :: StablePtr Session
+  -> CString
+  -> Ptr (StablePtr Dynamic)
+  -> IO Word64
 run_expr_dyn ptr cexpr ptrPtr = do
   session <- deRefStablePtr ptr
   expr <- peekCString cexpr
   compExprDyn session expr >>= \case
     Right dyn -> do
       newStablePtr dyn >>= poke ptrPtr
-      pure 1
-    Left err -> do
-      print err
       pure 0
+    Left GHCi.EUserInterrupt -> pure 1
+    Left (GHCi.EExitCode code) -> do
+      newStablePtr (Dynamic typeRep code) >>= poke ptrPtr
+      pure 2
+    Left (GHCi.EOtherException msg) -> do
+      newStablePtr (Dynamic typeRep msg) >>= poke ptrPtr
+      pure 3
 
 -- | The import paths are usually done from -i arguments on the cmdline.
 set_import_paths :: StablePtr Session -> Int -> Ptr CString -> IO ()

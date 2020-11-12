@@ -55,6 +55,42 @@ extern "C" fn free_list<T>(fptr: *mut c_void) {
 //     bx(&mut a)
 // }
 
+impl HsList<char> {
+    pub unsafe fn from_ptr(ptr: ffi::HsStablePtr) -> HsList<char> {
+        HsList {
+            ptr,
+            phantom: PhantomData,
+        }
+    }
+
+    pub fn from_iter<I>(mut iter: I) -> HsList<char>
+    where
+        I: Iterator<Item = char>,
+    {
+        let closure: Box<dyn FnMut(*mut char) -> bool> =
+            Box::new(move |ptr: *mut char| match iter.next() {
+                None => false,
+                Some(x) => {
+                    unsafe { *ptr = x }
+                    true
+                }
+            });
+        // need a second box because Box<dyn> is special (could probably avoid it by specialising)
+        let boxed_ctx = Box::new(closure); // 📦📦
+        let ctx = Box::into_raw(boxed_ctx);
+
+        let ptr = unsafe { char::mk_list(run_list::<char>, free_list::<char>, ctx as _) };
+        HsList {
+            ptr,
+            phantom: PhantomData,
+        }
+    }
+
+    pub fn to_string(self) -> String {
+        self.collect()
+    }
+}
+
 impl HsList<u64> {
     pub unsafe fn from_ptr(ptr: ffi::HsStablePtr) -> HsList<u64> {
         HsList {
@@ -137,6 +173,7 @@ hs_ffi!(u64, nextList64, foreignListRefU64);
 hs_ffi!(u32, nextList32, foreignListRefU64);
 hs_ffi!(u16, nextList16, foreignListRefU64);
 hs_ffi!(u8, nextList8, foreignListRefU64);
+hs_ffi!(char, nextListChar, foreignListRefChar);
 // hs_ffi!(bool, nextListBool);
 
 impl<T: HsFfi> Iterator for HsList<T> {

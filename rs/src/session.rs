@@ -1,5 +1,7 @@
 use crate::dynamic::Dynamic;
+use crate::dynamic::Typeable;
 use crate::ffi;
+use crate::list::HsList;
 use std::ffi::CString;
 use std::path::Path;
 use thiserror::Error;
@@ -55,17 +57,25 @@ impl Session {
     pub fn run_expr_dyn(&self, expr: &str) -> Result<Dynamic, EvalError> {
         let cstr = std::ffi::CString::new(expr).expect("module_name");
         let mut dyn_ptr = std::ptr::null_mut();
-        let success = unsafe {
+        let res = unsafe {
             ffi::run_expr_dyn(
                 self.ptr,
                 cstr.as_ptr() as *mut _,
                 &mut dyn_ptr as *mut _ as *mut _,
             )
         };
-        if success == 1 {
-            Ok(Dynamic { ptr: dyn_ptr })
-        } else {
-            Err(EvalError::ExitCode(3))
+        let dynamic = Dynamic { ptr: dyn_ptr };
+        match res {
+            0 => Ok(dynamic),
+            1 => Err(EvalError::Interrupt),
+            2 => Err(EvalError::ExitCode(
+                isize::from_dynamic(&dynamic).expect("error_code") as i32,
+            )),
+            3 => {
+                let chars = HsList::<char>::from_dynamic(&dynamic).expect("error_code");
+                Err(EvalError::Msg(chars.collect()))
+            }
+            _ => panic!("bad eval error exit code {}", res),
         }
     }
 

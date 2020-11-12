@@ -68,6 +68,43 @@ pub trait Typeable {
         Self: Sized;
 }
 
+impl Typeable for isize {
+    fn typerep() -> TypeRep {
+        TypeRep {
+            ptr: unsafe { ffi::int_type_rep() },
+        }
+    }
+
+    fn from_dynamic(dynamic: &Dynamic) -> Option<isize> {
+        if dynamic.fingerprint() == Self::typerep().fingerprint() {
+            unsafe { Some(ffi::deref_int64(dynamic.dynamic_value()) as isize) }
+        } else {
+            None
+        }
+    }
+}
+
+impl Typeable for char {
+    fn typerep() -> TypeRep {
+        TypeRep {
+            ptr: unsafe { ffi::char_type_rep() },
+        }
+    }
+
+    fn from_dynamic(dynamic: &Dynamic) -> Option<char> {
+        if dynamic.fingerprint() == Self::typerep().fingerprint() {
+            unsafe {
+                Some(
+                    std::char::from_u32(ffi::deref_int64(dynamic.dynamic_value()) as u32)
+                        .expect("char decode error"),
+                )
+            }
+        } else {
+            None
+        }
+    }
+}
+
 impl Typeable for u64 {
     fn typerep() -> TypeRep {
         TypeRep {
@@ -93,6 +130,24 @@ impl Typeable for HsList<u64> {
         if dynamic.fingerprint() == Self::typerep().fingerprint() {
             unsafe {
                 Some(HsList::<u64>::from_ptr(ffi::mk_list_iter(
+                    dynamic.dynamic_value(),
+                )))
+            }
+        } else {
+            None
+        }
+    }
+}
+
+impl Typeable for HsList<char> {
+    fn typerep() -> TypeRep {
+        char::typerep().list_of()
+    }
+
+    fn from_dynamic(dynamic: &Dynamic) -> Option<HsList<char>> {
+        if dynamic.fingerprint() == Self::typerep().fingerprint() {
+            unsafe {
+                Some(HsList::<char>::from_ptr(ffi::mk_list_iter(
                     dynamic.dynamic_value(),
                 )))
             }
