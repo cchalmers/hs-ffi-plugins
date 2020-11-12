@@ -25,7 +25,6 @@ fn main() -> Result<()> {
     let session = session::Session::new(Some(&opt.libdir));
 
     session.import_modules(&["Prelude"]);
-    session.run_expr("head [1,2,3]");
     session.import_modules(&["Prelude", "Data.Word"]);
     let dynamic = session.run_expr_dyn("head [4,1,2,3] :: Word64")?;
     eprintln!("the value is {:?}", u64::from_dynamic(&dynamic));
@@ -99,6 +98,11 @@ fn main() -> Result<()> {
             .expect("wasn't a list")
             .collect::<Vec<u64>>()
     );
+
+    // TODO don't require types to be imported
+    session.import_modules(&["Prelude", "Data.Word"]);
+    let list: HsList<u64> = session.run_expr("[5,2,100]")?;
+    eprintln!("the list is {:?}", list.collect::<Vec<u64>>());
 
     Ok(())
 }

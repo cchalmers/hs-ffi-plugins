@@ -86,7 +86,9 @@ let rust-channel-overlay = import sources.nixpkgs-mozilla;
       };
     };
 
-    crateNix = nixpkgs.callPackage ./rs/Cargo.nix { defaultCrateOverrides = crateOverrides; };
+    crateNix = nixpkgs.callPackage ./rs/Cargo.nix {
+      defaultCrateOverrides = crateOverrides;
+    };
 
     # The packages of this workspace with our crateOverrides
     packages = lib.mapAttrs (_: pkg: pkg.build) crateNix.workspaceMembers;

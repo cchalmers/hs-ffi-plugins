@@ -49,11 +49,6 @@ impl Session {
         unsafe { ffi::import_modules(self.ptr, cstrs.len() as i64, cstr_ptrs.as_ptr() as *mut _) }
     }
 
-    pub fn run_expr(&self, expr: &str) {
-        let cstr = std::ffi::CString::new(expr).expect("module_name");
-        unsafe { ffi::run_expr(self.ptr, cstr.as_ptr() as *mut _) }
-    }
-
     pub fn run_expr_dyn(&self, expr: &str) -> Result<Dynamic, EvalError> {
         let cstr = std::ffi::CString::new(expr).expect("module_name");
         let mut dyn_ptr = std::ptr::null_mut();
@@ -78,6 +73,35 @@ impl Session {
             _ => panic!("bad eval error exit code {}", res),
         }
     }
+
+    pub fn run_expr<T: Typeable + Sized>(&self, expr: &str) -> Result<T, EvalError> {
+        let cstr = std::ffi::CString::new(expr).expect("module_name");
+        let mut ptr = std::ptr::null_mut();
+        let typerep = T::typerep();
+        let res = unsafe {
+            ffi::run_expr_with_type(
+                self.ptr,
+                typerep.ptr,
+                cstr.as_ptr() as *mut _,
+                &mut ptr as *mut _ as *mut _,
+            )
+        };
+        match res {
+            0 => Ok(unsafe { T::deref_stable(ptr) }),
+            1 => Err(EvalError::Interrupt),
+            2 => {
+                let dynamic = Dynamic { ptr };
+                Err(EvalError::ExitCode(isize::from_dynamic(&dynamic).expect("error_code") as i32,))
+            }
+            3 => {
+                let dynamic = Dynamic { ptr };
+                let chars = HsList::<char>::from_dynamic(&dynamic).expect("error_code");
+                Err(EvalError::Msg(chars.collect()))
+            }
+            _ => panic!("bad eval error exit code {}", res),
+        }
+    }
+
 
     /// These are the `-i` arguments normally given to the cmdline.
     pub fn set_import_paths(&self, imports: &[&str]) -> bool {

@@ -308,6 +308,19 @@ compExprDyn :: Session -> String -> IO (Either GHCi.SerializableException Dynami
 compExprDyn session expr = tryJust (Just . GHCi.toSerializableException) $ flip unGhc session $ do
   GHC.dynCompileExpr expr
 
+compExprWithType :: Session -> TypeRep a -> String -> IO (Either GHCi.SerializableException a)
+compExprWithType session ty expr = tryJust (Just . GHCi.toSerializableException) $ flip unGhc session $ do
+  compileExprWithType ty expr
+
+compileExprWithType :: TypeRep a -> String -> Ghc a
+compileExprWithType ty expr = do
+  -- For now use strings for the type but should probably point to real names by applying type
+  -- signature to the parsed result. Is this still possible with a TypeRep? PrelNames has a bunch of
+  -- names from prelude.
+  parsed_expr <- GHC.parseExpr (expr <> " :: " <> show ty)
+  hval <- GHC.compileParsedExpr parsed_expr
+  return (unsafeCoerce# hval)
+
 cleanup :: Session -> IO ()
 cleanup session = flip unGhc session $ GHC.withCleanupSession (pure ())
 
@@ -422,6 +435,32 @@ run_expr_dyn ptr cexpr ptrPtr = do
     Left (GHCi.EOtherException msg) -> do
       newStablePtr (Dynamic typeRep msg) >>= poke ptrPtr
       pure 3
+
+-- compExprWithType :: Session -> TypeRep a -> String -> IO (Either GHCi.SerializableException a)
+
+run_expr_with_type
+  :: StablePtr Session
+  -> StablePtr SomeTypeRep
+  -> CString
+  -> Ptr (StablePtr Any)
+  -> IO Word64
+run_expr_with_type ptr ty cexpr ptrPtr = do
+  session <- deRefStablePtr ptr
+  SomeTypeRep ty <- deRefStablePtr ty
+  Just HRefl <- pure $ eqTypeRep (typeRepKind ty) (typeRep @Type)
+  expr <- peekCString cexpr
+  compExprWithType session ty expr >>= \case
+    Right dyn -> do
+      newStablePtr (unsafeCoerce# dyn) >>= poke ptrPtr
+      pure 0
+    Left GHCi.EUserInterrupt -> pure 1
+    Left (GHCi.EExitCode code) -> do
+      newStablePtr (unsafeCoerce# $ Dynamic typeRep code) >>= poke ptrPtr
+      pure 2
+    Left (GHCi.EOtherException msg) -> do
+      newStablePtr (unsafeCoerce# $ Dynamic typeRep msg) >>= poke ptrPtr
+      pure 3
+
 
 -- | The import paths are usually done from -i arguments on the cmdline.
 set_import_paths :: StablePtr Session -> Int -> Ptr CString -> IO ()
@@ -554,3 +593,4 @@ foreign export ccall import_modules :: StablePtr Session -> Int -> Ptr CString -
 foreign export ccall debugging :: StablePtr Session -> IO ()
 foreign export ccall load_modules :: StablePtr Session -> Int -> Ptr CString -> IO Word64
 foreign export ccall set_import_paths :: StablePtr Session -> Int -> Ptr CString -> IO ()
+foreign export ccall run_expr_with_type :: StablePtr Session -> StablePtr SomeTypeRep -> CString -> Ptr (StablePtr Any) -> IO Word64
