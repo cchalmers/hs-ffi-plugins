@@ -2,7 +2,7 @@ use callback_rs::dynamic::Typeable;
 use callback_rs::ffi;
 use callback_rs::list::HsList;
 use callback_rs::session;
-use color_eyre::eyre::Result;
+use color_eyre::eyre::{ContextCompat, Result, WrapErr};
 
 use std::path::PathBuf;
 use structopt::StructOpt;
@@ -27,8 +27,15 @@ fn main() -> Result<()> {
     session.import_modules(&["Prelude"]);
     session.run_expr("head [1,2,3]");
     session.import_modules(&["Prelude", "Data.Word"]);
-    let dynamic = session.run_expr_dyn("head [4,1,2,,3] :: Word64")?;
+    let dynamic = session.run_expr_dyn("head [4,1,2,3] :: Word64")?;
     eprintln!("the value is {:?}", u64::from_dynamic(&dynamic));
+
+    if let Err(err) = session
+        .run_expr_dyn("[4,1,2,,3] :: [Word64]")
+        .context("double_comma")
+    {
+        eprintln!("{:#}", err)
+    }
 
     let dynamic = session.run_expr_dyn("[4,1,2,3] :: [Word64]")?;
     eprintln!(
@@ -53,7 +60,7 @@ fn main() -> Result<()> {
     eprintln!(
         "the value is {:?}",
         HsList::<u64>::from_dynamic(&dynamic)
-            .expect("wasn't a list")
+            .context("wasn't a list")?
             .collect::<Vec<u64>>()
     );
 
