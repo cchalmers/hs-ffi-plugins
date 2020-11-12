@@ -42,86 +42,7 @@ extern "C" fn free_list<T>(fptr: *mut c_void) {
     }
 }
 
-// pub fn weird() -> *mut std::ffi::c_void {
-//     let closure: Box<dyn FnMut(*mut u64) -> bool> = Box::new(|ptr: *mut u64| true);
-//     let ptr = Box::into_raw(closure);
-//     ptr as _
-// }
-
-// fn weirder(ptr: *mut std::ffi::c_void) -> bool {
-//     let ptr = ptr as *mut dyn FnMut(*mut u64) -> bool;
-//     let bx = unsafe {Box::from_raw(ptr)};
-//     let mut a = 0;
-//     bx(&mut a)
-// }
-
-impl HsList<char> {
-    pub unsafe fn from_ptr(ptr: ffi::HsStablePtr) -> HsList<char> {
-        HsList {
-            ptr,
-            phantom: PhantomData,
-        }
-    }
-
-    pub fn from_iter<I>(mut iter: I) -> HsList<char>
-    where
-        I: Iterator<Item = char>,
-    {
-        let closure: Box<dyn FnMut(*mut char) -> bool> =
-            Box::new(move |ptr: *mut char| match iter.next() {
-                None => false,
-                Some(x) => {
-                    unsafe { *ptr = x }
-                    true
-                }
-            });
-        // need a second box because Box<dyn> is special (could probably avoid it by specialising)
-        let boxed_ctx = Box::new(closure); // 📦📦
-        let ctx = Box::into_raw(boxed_ctx);
-
-        let ptr = unsafe { char::mk_list(run_list::<char>, free_list::<char>, ctx as _) };
-        HsList {
-            ptr,
-            phantom: PhantomData,
-        }
-    }
-
-    pub fn to_string(self) -> String {
-        self.collect()
-    }
-}
-
 impl HsList<u64> {
-    pub unsafe fn from_ptr(ptr: ffi::HsStablePtr) -> HsList<u64> {
-        HsList {
-            ptr,
-            phantom: PhantomData,
-        }
-    }
-
-    pub fn from_iter<I>(mut iter: I) -> HsList<u64>
-    where
-        I: Iterator<Item = u64>,
-    {
-        let closure: Box<dyn FnMut(*mut u64) -> bool> =
-            Box::new(move |ptr: *mut u64| match iter.next() {
-                None => false,
-                Some(x) => {
-                    unsafe { *ptr = x }
-                    true
-                }
-            });
-        // need a second box because Box<dyn> is special (could probably avoid it by specialising)
-        let boxed_ctx = Box::new(closure); // 📦📦
-        let ctx = Box::into_raw(boxed_ctx);
-
-        let ptr = unsafe { u64::mk_list(run_list::<u64>, free_list::<u64>, ctx as _) };
-        HsList {
-            ptr,
-            phantom: PhantomData,
-        }
-    }
-
     /// A haskell generated list that counts up from 1.
     pub fn counter() -> HsList<u64> {
         HsList {
@@ -185,6 +106,38 @@ impl<T: HsFfi> Iterator for HsList<T> {
             Some(unsafe { t.assume_init() })
         } else {
             None
+        }
+    }
+}
+
+impl<T: HsFfi> HsList<T> {
+    pub unsafe fn from_ptr(ptr: ffi::HsStablePtr) -> HsList<T> {
+        HsList {
+            ptr,
+            phantom: PhantomData,
+        }
+    }
+
+    pub fn from_iter<I>(mut iter: I) -> HsList<T>
+    where
+        I: Iterator<Item = T>,
+    {
+        let closure: Box<dyn FnMut(*mut T) -> bool> =
+            Box::new(move |ptr: *mut T| match iter.next() {
+                None => false,
+                Some(x) => {
+                    unsafe { *ptr = x }
+                    true
+                }
+            });
+        // need a second box because Box<dyn> is special (could probably avoid it by specialising)
+        let boxed_ctx = Box::new(closure); // 📦📦
+        let ctx = Box::into_raw(boxed_ctx);
+
+        let ptr = unsafe { T::mk_list(run_list::<T>, free_list::<T>, ctx as _) };
+        HsList {
+            ptr,
+            phantom: PhantomData,
         }
     }
 }
