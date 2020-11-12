@@ -76,6 +76,33 @@ rec {
     #   inject test dependencies into the build
 
     crates = {
+      "Inflector" = rec {
+        crateName = "Inflector";
+        version = "0.11.4";
+        edition = "2015";
+        sha256 = "1lqmcni21ifzyq41fhz6k1j2b23cmsx469s4g4sf01l78miqqhzy";
+        libName = "inflector";
+        authors = [
+          "Josh Teeter<joshteeter@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "lazy_static";
+            packageId = "lazy_static";
+            optional = true;
+          }
+          {
+            name = "regex";
+            packageId = "regex";
+            optional = true;
+          }
+        ];
+        features = {
+          "default" = [ "heavyweight" ];
+          "heavyweight" = [ "regex" "lazy_static" ];
+        };
+        resolvedDefaultFeatures = [ "default" "heavyweight" "lazy_static" "regex" ];
+      };
       "addr2line" = rec {
         crateName = "addr2line";
         version = "0.14.0";
@@ -379,6 +406,10 @@ rec {
           "Christopher Chalmers <c.chalmers@me.com>"
         ];
         dependencies = [
+          {
+            name = "ouroboros";
+            packageId = "ouroboros";
+          }
           {
             name = "thiserror";
             packageId = "thiserror";
@@ -1059,6 +1090,56 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" "std" ];
       };
+      "ouroboros" = rec {
+        crateName = "ouroboros";
+        version = "0.4.1";
+        edition = "2018";
+        sha256 = "0nr34k6bw2i67f0g0d23d3s47wifix6iqhini1zlg3w8z9l5khql";
+        authors = [
+          "Joshua Maros <joshua-maros@github.com>"
+        ];
+        dependencies = [
+          {
+            name = "ouroboros_macro";
+            packageId = "ouroboros_macro";
+          }
+          {
+            name = "stable_deref_trait";
+            packageId = "stable_deref_trait";
+          }
+        ];
+        
+      };
+      "ouroboros_macro" = rec {
+        crateName = "ouroboros_macro";
+        version = "0.4.1";
+        edition = "2018";
+        sha256 = "1pl084m1j39dcdvg08ml2c0w9dk434g1rmbgkx4kfc1lhbi67jvp";
+        procMacro = true;
+        authors = [
+          "Joshua Maros <joshua-maros@github.com>"
+        ];
+        dependencies = [
+          {
+            name = "Inflector";
+            packageId = "Inflector";
+          }
+          {
+            name = "proc-macro2";
+            packageId = "proc-macro2";
+          }
+          {
+            name = "quote";
+            packageId = "quote";
+          }
+          {
+            name = "syn";
+            packageId = "syn";
+            features = [ "full" ];
+          }
+        ];
+        
+      };
       "owo-colors" = rec {
         crateName = "owo-colors";
         version = "1.1.3";
@@ -1484,6 +1565,20 @@ rec {
           "comex <comexk@gmail.com>"
         ];
         
+      };
+      "stable_deref_trait" = rec {
+        crateName = "stable_deref_trait";
+        version = "1.2.0";
+        edition = "2015";
+        sha256 = "1lxjr8q2n534b2lhkxd6l6wcddzjvnksi58zv11f9y0jjmr15wd8";
+        authors = [
+          "Robert Grosse <n210241048576@gmail.com>"
+        ];
+        features = {
+          "default" = [ "std" ];
+          "std" = [ "alloc" ];
+        };
+        resolvedDefaultFeatures = [ "alloc" "default" "std" ];
       };
       "strsim" = rec {
         crateName = "strsim";

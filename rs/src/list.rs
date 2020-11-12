@@ -118,10 +118,11 @@ impl<T: HsFfi> HsList<T> {
         }
     }
 
-    pub fn from_iter<I>(mut iter: I) -> HsList<T>
+    pub fn from_iter<I>(iter: I) -> HsList<T>
     where
-        I: Iterator<Item = T>,
+        I: IntoIterator<Item = T> + 'static,
     {
+        let mut iter = iter.into_iter();
         let closure: Box<dyn FnMut(*mut T) -> bool> =
             Box::new(move |ptr: *mut T| match iter.next() {
                 None => false,
@@ -139,5 +140,34 @@ impl<T: HsFfi> HsList<T> {
             ptr,
             phantom: PhantomData,
         }
+    }
+}
+
+// https://stackoverflow.com/a/50413062
+#[ouroboros::self_referencing]
+pub struct IntoChars {
+    string: String,
+    #[borrows(string)]
+    chars: std::str::Chars<'this>,
+}
+
+impl Iterator for IntoChars {
+    type Item = char;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.with_mut(|me| me.chars.next())
+    }
+}
+
+impl From<String> for HsList<char> {
+    fn from(string: String) -> HsList<char> {
+        Self::from_iter(
+            IntoCharsBuilder {
+                string,
+                chars_builder: |s| s.chars(),
+            }
+            .build(),
+        )
     }
 }

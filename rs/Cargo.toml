@@ -6,6 +6,7 @@ edition = "2018"
 
 [dependencies]
 thiserror = "1.0.22"
+ouroboros = "0.4.1"
 
 [build-dependencies]
 bindgen = "0.54"
