@@ -164,6 +164,23 @@ nextList list ptr = do
       Foreign.poke ptr x
       pure True
 
+-- | nextList that catches exceptions.
+--   If errPtr has changed then an exception has been thrown.
+tryNextList :: Storable a => StablePtr (IORef [a]) -> Ptr a -> Ptr (StablePtr SomeException) -> IO Bool
+tryNextList list ptr errPtr = do
+  ioref <- deRefStablePtr list
+  res <- try $ readIORef ioref >>= \case
+    []   -> pure False
+    x:xs -> do
+      writeIORef ioref xs
+      Foreign.poke ptr x
+      pure True
+  case res of
+    Right a -> pure a
+    Left err -> do
+      newStablePtr err >>= poke errPtr
+      pure False
+
 type ForeignListType a
    = FunPtr (Ptr () -> Ptr a -> IO Bool)
   -> FunPtr (Ptr () -> IO ())
@@ -216,6 +233,17 @@ nextListChar = nextList
 -- nextListBool :: StablePtr (IORef [Bool]) -> Ptr Bool -> IO Bool
 -- nextListBool = nextList
 
+tryNextList8 :: StablePtr (IORef [Word8]) -> Ptr Word8 -> Ptr (StablePtr SomeException) -> IO Bool
+tryNextList8 = tryNextList
+tryNextList16 :: StablePtr (IORef [Word16]) -> Ptr Word16 -> Ptr (StablePtr SomeException) -> IO Bool
+tryNextList16 = tryNextList
+tryNextList32 :: StablePtr (IORef [Word32]) -> Ptr Word32 -> Ptr (StablePtr SomeException) -> IO Bool
+tryNextList32 = tryNextList
+tryNextList64 :: StablePtr (IORef [Word64]) -> Ptr Word64 -> Ptr (StablePtr SomeException) -> IO Bool
+tryNextList64 = tryNextList
+tryNextListChar :: StablePtr (IORef [Char]) -> Ptr Char -> Ptr (StablePtr SomeException) -> IO Bool
+tryNextListChar = tryNextList
+
 loadloadload :: IO ()
 loadloadload = pure ()
 
@@ -234,6 +262,11 @@ foreign export ccall nextList16 :: StablePtr (IORef [Word16]) -> Ptr Word16 -> I
 foreign export ccall nextList32 :: StablePtr (IORef [Word32]) -> Ptr Word32 -> IO Bool
 foreign export ccall nextList64 :: StablePtr (IORef [Word64]) -> Ptr Word64 -> IO Bool
 foreign export ccall nextListChar :: StablePtr (IORef [Char]) -> Ptr Char -> IO Bool
+foreign export ccall tryNextList8  :: StablePtr (IORef [Word8])  -> Ptr Word8  -> Ptr (StablePtr SomeException) -> IO Bool
+foreign export ccall tryNextList16 :: StablePtr (IORef [Word16]) -> Ptr Word16 -> Ptr (StablePtr SomeException) -> IO Bool
+foreign export ccall tryNextList32 :: StablePtr (IORef [Word32]) -> Ptr Word32 -> Ptr (StablePtr SomeException) -> IO Bool
+foreign export ccall tryNextList64 :: StablePtr (IORef [Word64]) -> Ptr Word64 -> Ptr (StablePtr SomeException) -> IO Bool
+foreign export ccall tryNextListChar :: StablePtr (IORef [Char]) -> Ptr Char -> Ptr (StablePtr SomeException) -> IO Bool
 
 foreign export ccall loadloadload :: IO ()
 
@@ -245,6 +278,12 @@ deref_int64 = deRefStablePtr
 
 foreign export ccall deref_word64 :: StablePtr Word64 -> IO Word64
 foreign export ccall deref_int64 :: StablePtr Int64 -> IO Int64
+
+show_exception :: StablePtr SomeException -> IO (StablePtr String)
+show_exception ptr = do
+  err <- deRefStablePtr ptr
+  newStablePtr (displayException err)
+foreign export ccall show_exception :: StablePtr SomeException -> IO (StablePtr String)
 
 -- ghci like interface
 

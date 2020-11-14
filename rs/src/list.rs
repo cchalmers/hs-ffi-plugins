@@ -2,6 +2,7 @@ use crate::ffi;
 use std::ffi::c_void;
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
+use thiserror::Error;
 
 /// A haskell lazy linked list.
 pub struct HsList<T> {
@@ -52,7 +53,16 @@ impl HsList<u64> {
     }
 }
 
+/// An error from running a haskell evaluation.
+#[derive(Error, Debug)]
+pub enum HsException {
+    #[error("{0}")]
+    Msg(String),
+}
+
+
 pub trait HsFfi {
+    unsafe fn try_next_list(hsptr: ffi::HsStablePtr, t: *mut Self) -> Result<bool, HsException>;
     unsafe fn next_list(hsptr: ffi::HsStablePtr, t: *mut Self) -> bool;
     unsafe fn mk_list(
         run_ptr: extern "C" fn(*mut c_void, *mut Self) -> bool,
@@ -62,10 +72,22 @@ pub trait HsFfi {
 }
 
 macro_rules! hs_ffi {
-    ($ty: ty, $nm: ident, $mk_list_nm: ident) => {
+    ($ty: ty, $try_next: ident, $next: ident, $mk_list_nm: ident) => {
         impl HsFfi for $ty {
+            unsafe fn try_next_list(hsptr: ffi::HsStablePtr, t: *mut Self) -> Result<bool, HsException> {
+                let mut exception: ffi::HsStablePtr = std::ptr::null_mut();
+                let empty = ffi::$try_next(hsptr, t as _, &mut exception as *mut ffi::HsStablePtr as _) != 0;
+                if exception.is_null() {
+                    Ok(empty)
+                } else {
+                    let err_msg = ffi::show_exception(exception);
+                    let err_msg_iter = ffi::mk_list_iter(err_msg);
+                    let list: HsList<char> = HsList::from_ptr(err_msg_iter);
+                    Err(HsException::Msg(list.collect()))
+                }
+            }
             unsafe fn next_list(hsptr: ffi::HsStablePtr, t: *mut Self) -> bool {
-                ffi::$nm(hsptr, t as _) != 0
+                ffi::$next(hsptr, t as _) != 0
             }
             unsafe fn mk_list(
                 run_ptr: extern "C" fn(*mut c_void, *mut Self) -> bool,
@@ -86,15 +108,15 @@ macro_rules! hs_ffi {
     };
 }
 
-hs_ffi!(i64, nextList64, foreignListRefI64);
-hs_ffi!(i32, nextList32, foreignListRefI64);
-hs_ffi!(i16, nextList16, foreignListRefI64);
-hs_ffi!(i8, nextList8, foreignListRefI64);
-hs_ffi!(u64, nextList64, foreignListRefU64);
-hs_ffi!(u32, nextList32, foreignListRefU64);
-hs_ffi!(u16, nextList16, foreignListRefU64);
-hs_ffi!(u8, nextList8, foreignListRefU64);
-hs_ffi!(char, nextListChar, foreignListRefChar);
+hs_ffi!(i64, tryNextList64, nextList64, foreignListRefI64);
+hs_ffi!(i32, tryNextList32, nextList32, foreignListRefI64);
+hs_ffi!(i16, tryNextList16, nextList16, foreignListRefI64);
+hs_ffi!(i8, tryNextList8, nextList8, foreignListRefI64);
+hs_ffi!(u64, tryNextList64, nextList64, foreignListRefU64);
+hs_ffi!(u32, tryNextList32, nextList32, foreignListRefU64);
+hs_ffi!(u16, tryNextList16, nextList16, foreignListRefU64);
+hs_ffi!(u8, tryNextList8, nextList8, foreignListRefU64);
+hs_ffi!(char, tryNextListChar, nextListChar, foreignListRefChar);
 // hs_ffi!(bool, nextListBool);
 
 impl<T: HsFfi> Iterator for HsList<T> {
@@ -115,6 +137,14 @@ impl<T: HsFfi> HsList<T> {
         HsList {
             ptr,
             phantom: PhantomData,
+        }
+    }
+
+    pub fn try_next(&self) -> Option<Result<T, HsException>> {
+        let mut t = MaybeUninit::uninit();
+        match unsafe { T::try_next_list(self.ptr, t.as_mut_ptr()) } {
+            Ok(empty) => if empty { Some(Ok(unsafe { t.assume_init() })) } else { None },
+            Err(msg) => Some(Err(msg))
         }
     }
 
