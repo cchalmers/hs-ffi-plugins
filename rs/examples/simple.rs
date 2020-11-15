@@ -104,9 +104,16 @@ fn main() -> Result<()> {
     let list: HsList<u64> = session.run_expr("[5,2,100]")?;
     eprintln!("the list is {:?}", list.collect::<Vec<u64>>());
 
+    session.run_decl("a :: Num a => a; a = 5")?;
+    let val: u64 = session.run_expr("a")?;
+    eprintln!("the val is {}", val);
+
     let list: HsList<u64> = session.run_expr("undefined")?;
-    list.try_next().unwrap()?;
-    eprintln!("the list is {:?}", list.collect::<Vec<u64>>());
+
+    if let Err(err) = list.try_next().unwrap().context("undefined list")
+    {
+        eprintln!("{:?}", err)
+    }
 
     Ok(())
 }

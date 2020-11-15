@@ -331,6 +331,11 @@ compExpr :: Session -> String -> IO (Either GHCi.SerializableException GHC.HValu
 compExpr session expr = tryJust (Just . GHCi.toSerializableException) $ flip unGhc session $ do
   GHC.compileExpr expr
 
+runDecl :: Session -> String -> IO (Either GHCi.SerializableException [Name])
+runDecl session decl = tryJust (Just . GHCi.toSerializableException) $ flip unGhc session $ do
+  names <- GHC.runDecls decl
+  liftIO $ print (map (occNameString . occName) names)
+  pure names
 
 runExpr :: Session -> String -> IO GHC.ExecResult
 runExpr session expr = flip unGhc session $
@@ -341,7 +346,6 @@ runExpr session expr = flip unGhc session $
     --               , GHC.execWrap = \fhv -> EvalApp (EvalThis (evalWrapper st))
     --                                                (EvalThis fhv) }
     GHC.execStmt expr GHC.execOptions
-
 
 compExprDyn :: Session -> String -> IO (Either GHCi.SerializableException Dynamic)
 compExprDyn session expr = tryJust (Just . GHCi.toSerializableException) $ flip unGhc session $ do
@@ -499,6 +503,27 @@ run_expr_with_type ptr ty cexpr ptrPtr = do
     Left (GHCi.EOtherException msg) -> do
       newStablePtr (unsafeCoerce# $ Dynamic typeRep msg) >>= poke ptrPtr
       pure 3
+
+run_decl
+  :: StablePtr Session
+  -> CString
+  -> Ptr (StablePtr Any)
+  -> IO Word64
+run_decl ptr cdecl ptrPtr = do
+  session <- deRefStablePtr ptr
+  decl <- peekCString cdecl
+  runDecl session decl >>= \case
+    Right names -> do
+      newStablePtr (unsafeCoerce# names) >>= poke ptrPtr
+      pure 0
+    Left GHCi.EUserInterrupt -> pure 1
+    Left (GHCi.EExitCode code) -> do
+      newStablePtr (unsafeCoerce# $ Dynamic typeRep code) >>= poke ptrPtr
+      pure 2
+    Left (GHCi.EOtherException msg) -> do
+      newStablePtr (unsafeCoerce# $ Dynamic typeRep msg) >>= poke ptrPtr
+      pure 3
+foreign export ccall run_decl :: StablePtr Session -> CString -> Ptr (StablePtr Any) -> IO Word64
 
 
 -- | The import paths are usually done from -i arguments on the cmdline.

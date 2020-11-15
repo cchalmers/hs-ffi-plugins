@@ -75,7 +75,7 @@ impl Session {
     }
 
     pub fn run_expr<T: Typeable + Sized>(&self, expr: &str) -> Result<T, EvalError> {
-        let cstr = std::ffi::CString::new(expr).expect("module_name");
+        let cstr = std::ffi::CString::new(expr).expect("run_expr");
         let mut ptr = std::ptr::null_mut();
         let typerep = T::typerep();
         let res = unsafe {
@@ -88,6 +88,32 @@ impl Session {
         };
         match res {
             0 => Ok(unsafe { T::deref_stable(ptr) }),
+            1 => Err(EvalError::Interrupt),
+            2 => {
+                let dynamic = Dynamic { ptr };
+                Err(EvalError::ExitCode(isize::from_dynamic(&dynamic).expect("error_code") as i32,))
+            }
+            3 => {
+                let dynamic = Dynamic { ptr };
+                let chars = HsList::<char>::from_dynamic(&dynamic).expect("error_code");
+                Err(EvalError::Msg(chars.collect()))
+            }
+            _ => panic!("bad eval error exit code {}", res),
+        }
+    }
+
+    pub fn run_decl(&self, decl: &str) -> Result<(), EvalError> {
+        let cstr = std::ffi::CString::new(decl).expect("decl");
+        let mut ptr = std::ptr::null_mut();
+        let res = unsafe {
+            ffi::run_decl(
+                self.ptr,
+                cstr.as_ptr() as *mut _,
+                &mut ptr as *mut _ as *mut _,
+            )
+        };
+        match res {
+            0 => Ok(()),
             1 => Err(EvalError::Interrupt),
             2 => {
                 let dynamic = Dynamic { ptr };
