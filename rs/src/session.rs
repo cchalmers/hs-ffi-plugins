@@ -102,6 +102,17 @@ impl Session {
         }
     }
 
+    pub fn print_expr(&self, decl: &str) -> Result<(), EvalError> {
+        let cstr = std::ffi::CString::new(decl).expect("decl");
+        let res = unsafe {
+            ffi::run_expr(
+                self.ptr,
+                cstr.as_ptr() as *mut _,
+            )
+        };
+        Ok(())
+    }
+
     pub fn run_decl(&self, decl: &str) -> Result<(), EvalError> {
         let cstr = std::ffi::CString::new(decl).expect("decl");
         let mut ptr = std::ptr::null_mut();
