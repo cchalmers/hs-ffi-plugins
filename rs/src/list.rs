@@ -6,7 +6,7 @@ use thiserror::Error;
 
 /// A haskell lazy linked list.
 pub struct HsList<T> {
-    ptr: ffi::HsStablePtr,
+    pub ptr: ffi::HsStablePtr,
     phantom: PhantomData<T>,
 }
 

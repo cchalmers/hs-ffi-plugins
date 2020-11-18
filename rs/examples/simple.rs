@@ -115,5 +115,15 @@ fn main() -> Result<()> {
         eprintln!("{:?}", err)
     }
 
+    let my_cool_list = HsList::<u64>::from_iter(vec![1,2,3].into_iter());
+    session.import_modules(&["Prelude", "Data.Word", "Foreign.Ptr", "Foreign.StablePtr", "System.IO.Unsafe", "Data.IORef"]);
+    let decl = format!("b = unsafePerformIO (deRefStablePtr (castPtrToStablePtr (wordPtrToPtr ({:#p}))) >>= readIORef) :: [Word64]", my_cool_list.ptr);
+    eprintln!("using decl '{}'", decl);
+    session.run_decl(&decl)?;
+    let bigger_list: HsList<u64> = session.run_expr("1 : b ++ b")?;
+    eprintln!("the bigger list is {:?}", bigger_list.collect::<Vec<u64>>());
+
+    // session.run_decl("
+
     Ok(())
 }
