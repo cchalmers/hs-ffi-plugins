@@ -19,4 +19,5 @@ fn main() {
         .expect("Failed to write bindings!");
 
     println!("cargo:rustc-link-lib=plugins-export");
+    println!("cargo:rerun-if-env-changed=NIX_CFLAGS_COMPILE");
 }

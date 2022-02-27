@@ -58,6 +58,8 @@ import qualified Packages
 import           SysTools               (initLlvmConfig, initSysTools)
 import           TcRnMonad              (initTcRnIf)
 
+import Debug.Trace
+
 -- foreign import ccall "dynamic" ioNext :: FunPtr (Ptr () -> IO Word64) -> Ptr () -> IO Word64
 -- foreign import ccall "dynamic" iofd :: FunPtr (Ptr () -> IO Bool) -> Ptr () -> IO Bool
 
@@ -85,9 +87,9 @@ foreignList
 foreignList next free ctx = do
   let iom = alloca $ \w -> do
         ffiNext next ctx w >>= \case
-          True -> Just <$> Foreign.peek w
-          False -> ffiFree free ctx >> pure Nothing
-  lazyIOM iom
+          True -> trace "foreignList_TRUE" $ Just <$> Foreign.peek w
+          False -> trace "foreignList_FALSE" $ ffiFree free ctx >> pure Nothing
+  trace "foreignList" lazyIOM iom
 
 foreignListRef
   :: Storable a
@@ -154,12 +156,13 @@ mkNewList = newIORef myList >>= newStablePtr
 mk_list_iter :: StablePtr [Any] -> IO (StablePtr (IORef [Any]))
 mk_list_iter ptr = deRefStablePtr ptr >>= newIORef >>= newStablePtr
 
-nextList :: Storable a => StablePtr (IORef [a]) -> Ptr a -> IO Bool
+nextList :: (Show a, Storable a) => StablePtr (IORef [a]) -> Ptr a -> IO Bool
 nextList list ptr = do
   ioref <- deRefStablePtr list
   readIORef ioref >>= \case
     []   -> pure False
     x:xs -> do
+      print x
       writeIORef ioref xs
       Foreign.poke ptr x
       pure True
@@ -188,7 +191,7 @@ type ForeignListType a
   -> IO (StablePtr (IORef [a]))
 
 foreignListRefU64 :: ForeignListType Word64
-foreignListRefU64 = foreignListRef
+foreignListRefU64 = trace "ForeignListRefU64" foreignListRef
 foreignListRefU32 :: ForeignListType Word32
 foreignListRefU32 = foreignListRef
 foreignListRefU16 :: ForeignListType Word16

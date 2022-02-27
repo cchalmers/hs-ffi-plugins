@@ -11,7 +11,7 @@ use callback_rs::list;
 
 // use std::cell::Cell;
 // use std::cell::UnsafeCell;
-use std::os::raw::*;
+// use std::os::raw::*;
 // use std::ptr;
 // use std::sync::Arc;
 
@@ -76,88 +76,89 @@ fn main() {
         ffi::hello();
     }
 
-    let l1 = HsList::new();
-    let mut l2 = HsList::new();
-    l2.next();
-    let v: Vec<(u64, u64)> = l1.zip(l2).take(10).collect();
-    println!("{:?}", v);
+    // let l1 = HsList::new();
+    // let mut l2 = HsList::new();
+    // l2.next();
+    // let v: Vec<(u64, u64)> = l1.zip(l2).take(10).collect();
+    // println!("{:?}", v);
 
-    const N: usize = 1_000_000;
-    let mut l = HsList::new();
-    let before = std::time::Instant::now();
-    println!("{:?}", l.nth(N));
-    let taken = before.elapsed();
-    println!(
-        "l.nth({}) took {:#?} = {:#?} per step",
-        N,
-        taken,
-        taken / N as u32
-    );
+    // const N: usize = 1_000_000;
+    // let mut l = HsList::new();
+    // let before = std::time::Instant::now();
+    // println!("{:?}", l.nth(N));
+    // let taken = before.elapsed();
+    // println!(
+    //     "l.nth({}) took {:#?} = {:#?} per step",
+    //     N,
+    //     taken,
+    //     taken / N as u32
+    // );
 
-    let mut list = list::HsList::counter();
-    println!(
-        "taking 2: [{}, {}]",
-        list.next().unwrap(),
-        list.next().unwrap()
-    );
-    let mut cloned = list.clone();
-    println!(
-        "taking 2: [{}, {}]",
-        list.next().unwrap(),
-        list.next().unwrap()
-    );
-    println!(
-        "taking 2 (cloned): [{}, {}]",
-        cloned.next().unwrap(),
-        cloned.next().unwrap()
-    );
+    // let mut list = list::HsList::counter();
+    // println!(
+    //     "taking 2: [{}, {}]",
+    //     list.next().unwrap(),
+    //     list.next().unwrap()
+    // );
+    // let mut cloned = list.clone();
+    // println!(
+    //     "taking 2: [{}, {}]",
+    //     list.next().unwrap(),
+    //     list.next().unwrap()
+    // );
+    // println!(
+    //     "taking 2 (cloned): [{}, {}]",
+    //     cloned.next().unwrap(),
+    //     cloned.next().unwrap()
+    // );
 
-    if false {
-        let file = std::ffi::CString::new("../dyn/Plug.o").unwrap();
-        let symbol = std::ffi::CString::new("myCoolList").unwrap();
+    // if false {
+    //     let file = std::ffi::CString::new("../dyn/Plug.o").unwrap();
+    //     let symbol = std::ffi::CString::new("myCoolList").unwrap();
 
-        let mut dyn_ptr = std::ptr::null_mut();
-        unsafe {
-            // let res = ffi::loadList(
-            //     file.as_ptr() as _,
-            //     symbol.as_ptr() as _,
-            //     &mut dyn_ptr as *mut *mut c_void as _,
-            // );
-            // println!("res = {:?}", res);
-        };
-        let mut dyn_list = HsList { ptr: dyn_ptr };
-        println!(
-            "dyn_list.next() = [{}, {}, {}]",
-            dyn_list.next().unwrap(),
-            dyn_list.next().unwrap(),
-            dyn_list.next().unwrap()
-        );
+    //     let mut dyn_ptr = std::ptr::null_mut();
+    //     // unsafe {
+    //     //     let res = ffi::loadList(
+    //     //         file.as_ptr() as _,
+    //     //         symbol.as_ptr() as _,
+    //     //         &mut dyn_ptr as *mut *mut c_void as _,
+    //     //     );
+    //     //     println!("res = {:?}", res);
+    //     // };
+    //     let mut dyn_list = HsList { ptr: dyn_ptr };
+    //     println!(
+    //         "dyn_list.next() = [{}, {}, {}]",
+    //         dyn_list.next().unwrap(),
+    //         dyn_list.next().unwrap(),
+    //         dyn_list.next().unwrap()
+    //     );
 
-        let mut dyn_ptr = std::ptr::null_mut();
-        unsafe {
-            // let res = ffi::loadList(
-            //     file.as_ptr() as _,
-            //     symbol.as_ptr() as _,
-            //     &mut dyn_ptr as *mut *mut c_void as _,
-            // );
-            // println!("res = {:?}", res);
-        };
-        let mut dyn_list = HsList { ptr: dyn_ptr };
-        println!(
-            "dyn_list.next() = [{}, {}, {}]",
-            dyn_list.next().unwrap(),
-            dyn_list.next().unwrap(),
-            dyn_list.nth(1_000_000).unwrap()
-        );
-    }
+    //     let mut dyn_ptr = std::ptr::null_mut();
+    //     // unsafe {
+    //     //     let res = ffi::loadList(
+    //     //         file.as_ptr() as _,
+    //     //         symbol.as_ptr() as _,
+    //     //         &mut dyn_ptr as *mut *mut c_void as _,
+    //     //     );
+    //     //     println!("res = {:?}", res);
+    //     // };
+    //     let mut dyn_list = HsList { ptr: dyn_ptr };
+    //     println!(
+    //         "dyn_list.next() = [{}, {}, {}]",
+    //         dyn_list.next().unwrap(),
+    //         dyn_list.next().unwrap(),
+    //         dyn_list.nth(1_000_000).unwrap()
+    //     );
+    // }
 
-    let vec = vec![11, 22, 33, 44, 55, 66];
+    let vec: Vec<u64> = vec![11, 22, 33, 44, 55, 66];
     let hs = list::HsList::from_iter(vec.into_iter());
-    let hs2 = hs.clone();
-    let vec: Vec<u64> = hs.collect();
+    // let hs2 = hs.clone();
+    // println!("cloned it");
+    let vec: Vec<u64> = hs.take(8).collect();
     println!("{:?}", vec);
-    let vec2: Vec<u64> = hs2.collect();
-    println!("{:?}", vec2);
+    // let vec2: Vec<u64> = hs2.collect();
+    // println!("{:?}", vec2);
 
     // loadList
     //   :: CString -- ^ object file

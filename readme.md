@@ -18,5 +18,5 @@ $ ghcid -c "cabal repl --repl-options -fobject-code"
 ```
 $ cd rs
 $ nix-shell
-$ cabal watch
+$ cargo watch
 ```

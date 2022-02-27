@@ -32,7 +32,9 @@ extern "C" fn run_list<T>(fptr: *mut c_void, ptr: *mut T) -> bool {
     assert!(!fptr.is_null());
     assert!(!ptr.is_null());
     let fptr = fptr as *mut CbBox<T>;
-    unsafe { (*fptr)(ptr) }
+    let b = unsafe { (*fptr)(ptr) };
+    eprintln!("run_list b = {:?}", b);
+    b
 }
 
 extern "C" fn free_list<T>(fptr: *mut c_void) {
@@ -94,12 +96,13 @@ macro_rules! hs_ffi {
                 free_ptr: extern "C" fn(*mut c_void),
                 ctx: *mut c_void,
             ) -> ffi::HsStablePtr {
+                eprintln!("mk_list");
                 use std::mem::transmute;
                 // Haskell exports all function pointers as FunPtr(IO ()) so we need to transmute here.
                 // This is super unsafe and can easily go very wrong but I don't know a better way.
                 let run_ptr = transmute::<
                     extern "C" fn(*mut c_void, *mut $ty) -> bool,
-                    extern "C" fn(),
+                    extern "C" fn(), // <- MUST BE GOING WRONG HERE? i.e. it's losing the bool?
                 >(run_ptr);
                 let free_ptr = transmute::<extern "C" fn(*mut c_void), extern "C" fn()>(free_ptr);
                 ffi::$mk_list_nm(Some(run_ptr), Some(free_ptr), ctx as _)
@@ -155,8 +158,12 @@ impl<T: HsFfi> HsList<T> {
         let mut iter = iter.into_iter();
         let closure: Box<dyn FnMut(*mut T) -> bool> =
             Box::new(move |ptr: *mut T| match iter.next() {
-                None => false,
+                None => {
+                    eprintln!("None");
+                    false
+                }
                 Some(x) => {
+                    eprintln!("Some");
                     unsafe { *ptr = x }
                     true
                 }

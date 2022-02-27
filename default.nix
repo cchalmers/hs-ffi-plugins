@@ -3,8 +3,8 @@
 let rust-channel-overlay = import sources.nixpkgs-mozilla;
     rust-overlay = self: super:
       let rust-stable = super.rustChannelOf {
-            channel = "1.47.0";
-            sha256 = "1hkisci4as93hx8ybf13bmxkj9jsvd4a9ilvjmw6n64w4jkc1nk9";
+            channel = "1.54.0";
+            sha256 = "1b866r7slk1sy55sfq3c5zfxi5r17vzlbram8zn4xhpp44kc5myq";
           };
           rust-nightly = super.rustChannelOf {
             channel = "nightly";
