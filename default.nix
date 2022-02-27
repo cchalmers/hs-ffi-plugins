@@ -3,8 +3,8 @@
 let rust-channel-overlay = import sources.nixpkgs-mozilla;
     rust-overlay = self: super:
       let rust-stable = super.rustChannelOf {
-            channel = "1.54.0";
-            sha256 = "1b866r7slk1sy55sfq3c5zfxi5r17vzlbram8zn4xhpp44kc5myq";
+            channel = "1.59.0";
+            sha256 = "sha256:0dbar9p8spldj16zy7vahg9dq31vlkbrp40vq5f1q167cmjik1g0";
           };
           rust-nightly = super.rustChannelOf {
             channel = "nightly";
@@ -15,7 +15,7 @@ let rust-channel-overlay = import sources.nixpkgs-mozilla;
       in {
         rustc = rust-channel.rust;
         cargo = rust-channel.cargo;
-        rustPlatform = self.makeRustPlatform { rustc = self.rustc; cargo = self.cargo;};
+        rustPlatform = self.makeRustPlatform { rustc = self.rustc; cargo = self.cargo; };
         rustfmt = rust-channel.rustfmt-preview;
         crate2nix =  self.callPackage sources.crate2nix {};
       };
