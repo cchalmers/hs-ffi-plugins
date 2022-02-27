@@ -64,12 +64,12 @@ import Debug.Trace
 -- foreign import ccall "dynamic" iofd :: FunPtr (Ptr () -> IO Bool) -> Ptr () -> IO Bool
 
 foreign import ccall "dynamic" ffiNextUnit ::
-  FunPtr (Ptr () -> Ptr () -> IO Bool)
-       -> Ptr () -> Ptr () -> IO Bool
+  FunPtr (Ptr () -> Ptr () -> IO Word8)
+       -> Ptr () -> Ptr () -> IO Word8
 
 ffiNext ::
-  FunPtr (Ptr () -> Ptr a -> IO Bool)
-       -> Ptr () -> Ptr a -> IO Bool
+  FunPtr (Ptr () -> Ptr a -> IO Word8)
+       -> Ptr () -> Ptr a -> IO Word8
 ffiNext fptr stb a = ffiNextUnit (castFunPtr fptr) stb (castPtr a)
 
 foreign import ccall "dynamic" ffiFree ::
@@ -80,20 +80,20 @@ stableRef a = newIORef a >>= newStablePtr
 
 foreignList
   :: Storable a
-  => FunPtr (Ptr () -> Ptr a -> IO Bool)
+  => FunPtr (Ptr () -> Ptr a -> IO Word8)
   -> FunPtr (Ptr () -> IO ())
   -> Ptr ()
   -> IO [a]
 foreignList next free ctx = do
   let iom = alloca $ \w -> do
         ffiNext next ctx w >>= \case
-          True -> trace "foreignList_TRUE" $ Just <$> Foreign.peek w
-          False -> trace "foreignList_FALSE" $ ffiFree free ctx >> pure Nothing
-  trace "foreignList" lazyIOM iom
+          0 -> ffiFree free ctx >> pure Nothing
+          _ -> Just <$> Foreign.peek w
+  lazyIOM iom
 
 foreignListRef
   :: Storable a
-  => FunPtr (Ptr () -> Ptr a -> IO Bool)
+  => FunPtr (Ptr () -> Ptr a -> IO Word8)
   -> FunPtr (Ptr () -> IO ())
   -> Ptr ()
   -> IO (StablePtr (IORef [a]))
@@ -162,7 +162,6 @@ nextList list ptr = do
   readIORef ioref >>= \case
     []   -> pure False
     x:xs -> do
-      print x
       writeIORef ioref xs
       Foreign.poke ptr x
       pure True
@@ -185,13 +184,13 @@ tryNextList list ptr errPtr = do
       pure False
 
 type ForeignListType a
-   = FunPtr (Ptr () -> Ptr a -> IO Bool)
+   = FunPtr (Ptr () -> Ptr a -> IO Word8)
   -> FunPtr (Ptr () -> IO ())
   -> Ptr ()
   -> IO (StablePtr (IORef [a]))
 
 foreignListRefU64 :: ForeignListType Word64
-foreignListRefU64 = trace "ForeignListRefU64" foreignListRef
+foreignListRefU64 = foreignListRef
 foreignListRefU32 :: ForeignListType Word32
 foreignListRefU32 = foreignListRef
 foreignListRefU16 :: ForeignListType Word16
