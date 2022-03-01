@@ -37,10 +37,14 @@ import           System.IO.Unsafe
 import           Type.Reflection
 import           Unsafe.Coerce
 
+import           System.IO              as IO
+
 import qualified BasicTypes
 import           BinIface
-import           DynFlags               (defaultDynFlags, initDynFlags)
+import           DynFlags               (HasDynFlags, defaultDynFlags,
+                                         initDynFlags)
 import qualified DynFlags
+import           Exception              (ExceptionMonad, gmask)
 import qualified GHC
 import           GHC.Exts
 import           GHC.Paths              (libdir)
@@ -58,7 +62,7 @@ import qualified Packages
 import           SysTools               (initLlvmConfig, initSysTools)
 import           TcRnMonad              (initTcRnIf)
 
-import Debug.Trace
+import           Debug.Trace
 
 -- foreign import ccall "dynamic" ioNext :: FunPtr (Ptr () -> IO Word64) -> Ptr () -> IO Word64
 -- foreign import ccall "dynamic" iofd :: FunPtr (Ptr () -> IO Bool) -> Ptr () -> IO Bool
@@ -327,7 +331,8 @@ linkInMemory session = flip unGhc session $ do
 
 importModules :: Session -> [String] -> IO ()
 importModules session modules = flip unGhc session $ do
-  GHC.setContext $ map (GHC.IIDecl . GHC.simpleImportDecl . mkModuleName) modules
+  ghciHandle (\e -> liftIO (print e) >> pure ()) $
+    GHC.setContext $ map (GHC.IIDecl . GHC.simpleImportDecl . mkModuleName) modules
 
 compExpr :: Session -> String -> IO (Either GHCi.SerializableException GHC.HValue)
 compExpr session expr = tryJust (Just . GHCi.toSerializableException) $ flip unGhc session $ do
@@ -439,9 +444,6 @@ foreign export ccall dyn_val :: StablePtr Dynamic -> IO (StablePtr Any)
 
 new_session :: CString -> IO (StablePtr Session)
 new_session cstr = do
-  print cstr
-  str <- peekCString cstr
-  print str
   lib >>= unsafeNewSession >>= newStablePtr
   where lib = if cstr == nullPtr then pure Nothing else Just <$> (peekCString cstr)
 
@@ -459,6 +461,7 @@ run_expr ptr cexpr = do
   expr <- peekCString cexpr
   compExpr session ("print (" <> expr <> ") :: IO ()") >>= \case
     Right io -> unsafeCoerce io
+    Left (GHCi.EOtherException msg) -> putStrLn msg
     Left err -> print err
 
 run_expr_dyn
@@ -543,8 +546,36 @@ load_modules ptr n modulesPtr = do
   session <- deRefStablePtr ptr
   modules <- mapM (\n -> peekElemOff modulesPtr n >>= peekCString) [0..n-1]
   flip unGhc session $ do
-    success <- loadModules (map (,Nothing) modules)
+    success <- ghciHandle (\e -> liftIO (print e) >> pure 0) $ loadModules (map (,Nothing) modules)
     pure success
+
+doLoad :: GHC.GhcMonad m => Bool -> GHC.LoadHowMuch -> m GHC.SuccessFlag
+doLoad retain_context howmuch = do
+  -- Enable buffering stdout and stderr as we're compiling. Keeping these
+  -- handles unbuffered will just slow the compilation down, especially when
+  -- compiling in parallel.
+  GHC.gbracket (liftIO $ do
+                   IO.hSetBuffering IO.stdout IO.LineBuffering
+                   IO.hSetBuffering IO.stderr IO.LineBuffering)
+           (\_ ->
+            liftIO $ do IO.hSetBuffering IO.stdout IO.NoBuffering
+                        IO.hSetBuffering IO.stderr IO.NoBuffering) $ \_ -> do
+      ok <- trySuccess $ GHC.load howmuch
+      -- afterLoad ok retain_context
+      return ok
+
+trySuccess :: GHC.GhcMonad m => m GHC.SuccessFlag -> m GHC.SuccessFlag
+trySuccess act =
+    handleSourceError (\e -> do GHC.printException e
+                                return GHC.Failed) $ do
+      act
+
+ghciHandle :: (HasDynFlags m, ExceptionMonad m) => (SomeException -> m a) -> m a -> m a
+ghciHandle h m = gmask $ \restore -> do
+                 -- Force dflags to avoid leaking the associated HscEnv
+                 dflags <- DynFlags.getDynFlags
+                 dflags `seq` GHC.gcatch (restore (GHC.prettyPrintGhcErrors dflags m)) $ \e -> restore (h e)
+
 
 -- | taken from GHCi.UI
 loadModules :: [(FilePath, Maybe GHC.Phase)] -> Ghc Word64
@@ -555,7 +586,8 @@ loadModules files = do
   GHC.setTargets []
   _ <- GHC.load GHC.LoadAllTargets
   GHC.setTargets targets
-  success <- GHC.load GHC.LoadAllTargets
+  -- success <- GHC.load GHC.LoadAllTargets
+  success <- doLoad False GHC.LoadAllTargets -- is GHC.load good enough?
 
   loaded_mods <- getLoadedModules
   -- -- modulesLoadedMsg ok loaded_mods

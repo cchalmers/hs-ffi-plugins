@@ -11,7 +11,7 @@ use structopt::StructOpt;
 #[derive(StructOpt, Debug)]
 #[structopt(name = "basic")]
 struct Opt {
-    libdir: PathBuf,
+    libdir: Option<PathBuf>,
 }
 
 fn main() -> Result<()> {
@@ -22,7 +22,7 @@ fn main() -> Result<()> {
 
     let opt = Opt::from_args();
 
-    let session = session::Session::new(Some(&opt.libdir));
+    let session = session::Session::new(opt.libdir.as_ref());
 
     session.import_modules(&["Prelude"]);
     session.import_modules(&["Prelude", "Data.Word"]);
