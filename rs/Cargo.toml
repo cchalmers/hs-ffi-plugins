@@ -14,4 +14,5 @@ bindgen = "0.54"
 [dev-dependencies]
 color-eyre = "0.5.7"
 structopt = "0.3.20"
-rustyline = "6.3.0"
+rustyline = "9.1.0"
+xdg = "2.4.1"

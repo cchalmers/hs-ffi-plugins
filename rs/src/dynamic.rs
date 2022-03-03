@@ -65,7 +65,9 @@ pub trait Typeable {
     fn typerep() -> TypeRep;
     unsafe fn deref_stable(ptr: ffi::HsStablePtr) -> Self;
     fn from_dynamic(dynamic: &Dynamic) -> Option<Self>
-    where Self: Sized {
+    where
+        Self: Sized,
+    {
         if dynamic.fingerprint() == Self::typerep().fingerprint() {
             unsafe { Some(Self::deref_stable(dynamic.dynamic_value())) }
         } else {
@@ -92,8 +94,7 @@ impl Typeable for char {
         }
     }
     unsafe fn deref_stable(ptr: ffi::HsStablePtr) -> char {
-        std::char::from_u32(ffi::deref_int64(ptr) as u32)
-            .expect("char decode error")
+        std::char::from_u32(ffi::deref_int64(ptr) as u32).expect("char decode error")
     }
 }
 

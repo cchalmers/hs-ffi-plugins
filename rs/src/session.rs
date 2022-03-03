@@ -91,7 +91,9 @@ impl Session {
             1 => Err(EvalError::Interrupt),
             2 => {
                 let dynamic = Dynamic { ptr };
-                Err(EvalError::ExitCode(isize::from_dynamic(&dynamic).expect("error_code") as i32,))
+                Err(EvalError::ExitCode(
+                    isize::from_dynamic(&dynamic).expect("error_code") as i32,
+                ))
             }
             3 => {
                 let dynamic = Dynamic { ptr };
@@ -104,12 +106,7 @@ impl Session {
 
     pub fn print_expr(&self, decl: &str) -> Result<(), EvalError> {
         let cstr = std::ffi::CString::new(decl).expect("decl");
-        unsafe {
-            ffi::run_expr(
-                self.ptr,
-                cstr.as_ptr() as *mut _,
-            )
-        };
+        unsafe { ffi::run_expr(self.ptr, cstr.as_ptr() as *mut _) };
         Ok(())
     }
 
@@ -128,7 +125,9 @@ impl Session {
             1 => Err(EvalError::Interrupt),
             2 => {
                 let dynamic = Dynamic { ptr };
-                Err(EvalError::ExitCode(isize::from_dynamic(&dynamic).expect("error_code") as i32,))
+                Err(EvalError::ExitCode(
+                    isize::from_dynamic(&dynamic).expect("error_code") as i32,
+                ))
             }
             3 => {
                 let dynamic = Dynamic { ptr };
@@ -138,7 +137,6 @@ impl Session {
             _ => panic!("bad eval error exit code {}", res),
         }
     }
-
 
     /// These are the `-i` arguments normally given to the cmdline.
     pub fn set_import_paths(&self, imports: &[&str]) -> bool {

@@ -6,4 +6,4 @@ import Data.Word
 -- some code goes here
 -- @
 myCoolList :: [Word64]
-myCoolList = [9,13..30]
+myCoolList = [3,13..30]

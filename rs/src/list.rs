@@ -60,7 +60,6 @@ pub enum HsException {
     Msg(String),
 }
 
-
 pub trait HsFfi {
     unsafe fn try_next_list(hsptr: ffi::HsStablePtr, t: *mut Self) -> Result<bool, HsException>;
     unsafe fn next_list(hsptr: ffi::HsStablePtr, t: *mut Self) -> bool;
@@ -74,9 +73,14 @@ pub trait HsFfi {
 macro_rules! hs_ffi {
     ($ty: ty, $try_next: ident, $next: ident, $mk_list_nm: ident) => {
         impl HsFfi for $ty {
-            unsafe fn try_next_list(hsptr: ffi::HsStablePtr, t: *mut Self) -> Result<bool, HsException> {
+            unsafe fn try_next_list(
+                hsptr: ffi::HsStablePtr,
+                t: *mut Self,
+            ) -> Result<bool, HsException> {
                 let mut exception: ffi::HsStablePtr = std::ptr::null_mut();
-                let empty = ffi::$try_next(hsptr, t as _, &mut exception as *mut ffi::HsStablePtr as _) != 0;
+                let empty =
+                    ffi::$try_next(hsptr, t as _, &mut exception as *mut ffi::HsStablePtr as _)
+                        != 0;
                 if exception.is_null() {
                     Ok(empty)
                 } else {
@@ -143,8 +147,14 @@ impl<T: HsFfi> HsList<T> {
     pub fn try_next(&self) -> Option<Result<T, HsException>> {
         let mut t = MaybeUninit::uninit();
         match unsafe { T::try_next_list(self.ptr, t.as_mut_ptr()) } {
-            Ok(empty) => if empty { Some(Ok(unsafe { t.assume_init() })) } else { None },
-            Err(msg) => Some(Err(msg))
+            Ok(empty) => {
+                if empty {
+                    Some(Ok(unsafe { t.assume_init() }))
+                } else {
+                    None
+                }
+            }
+            Err(msg) => Some(Err(msg)),
         }
     }
 
@@ -155,9 +165,7 @@ impl<T: HsFfi> HsList<T> {
         let mut iter = iter.into_iter();
         let closure: Box<dyn FnMut(*mut T) -> bool> =
             Box::new(move |ptr: *mut T| match iter.next() {
-                None => {
-                    false
-                }
+                None => false,
                 Some(x) => {
                     unsafe { *ptr = x }
                     true

@@ -43,9 +43,10 @@ unsafeNewSession :: IO Session
 unsafeNewSession = do
   ref <- newIORef (error "empty session")
   let session = Session ref
+  putStrLn $ "Using libdir = " <> libdir
   flip unGhc session $ GHC.initGhcMonad (Just libdir)
   linkInMemory session -- TEMP
-  GHC.load GHC.LoadAllTargets >>= liftIO . print -- TEMP
+  -- GHC.load GHC.LoadAllTargets >>= liftIO . print -- TEMP
   pure session
 
 linkInMemory :: Session -> IO ()
@@ -107,10 +108,10 @@ import_module ptr cmod = do
   modu <- peekCString cmod
   importModules session [modu]
 
-foreign export ccall new_session :: IO (StablePtr Session)
-foreign export ccall run_expr :: StablePtr Session -> CString -> IO ()
-foreign export ccall cleanup_session :: StablePtr Session -> IO ()
-foreign export ccall import_module :: StablePtr Session -> CString -> IO ()
+-- foreign export ccall new_session :: IO (StablePtr Session)
+-- foreign export ccall run_expr :: StablePtr Session -> CString -> IO ()
+-- foreign export ccall cleanup_session :: StablePtr Session -> IO ()
+-- foreign export ccall import_module :: StablePtr Session -> CString -> IO ()
 
 -- experimenting -------------------------------------------------------
 
@@ -163,18 +164,25 @@ xxx = withSession' $ do
   -- weird misspelt packages like: `ghc-pths-0.1.0.12-5d9fa1db`. Also the path get included in this
   -- packages conf file so it looks like it's getting confused. Running with `cabal run` seems to
   -- work fine.
-  -- GHC.addTarget (objTarget "../dyn/Plug.hs")
+  -- GHC.addTarget (objTarget "../dyn2/src/Plug2.hs")
 
   -- Anyway, loading like this probably isn't what I want, just having a precompiled package in scope
   -- means I can load the module normally.
+  -- One way to get a compiled module is to set GHC_ENVIRONMENT to a ghc environment made with
+  --   cabal build --write-ghc-environment=always
+  -- And then you'll be able to "quickly" get a new version of stuff (with cabal's incremental
+  -- compilation).
 
   -- GHC.load GHC.LoadAllTargets >>= liftIO . print
   GHC.setContext (map (GHC.IIDecl . GHC.simpleImportDecl)
-    [mkModuleName "Prelude", mkModuleName "Plug2"])
+    -- [mkModuleName "Prelude", mkModuleName "Plug2"])
+    -- why is this so slow? takes like 12 seconds. Fortunately the version from rust is much faster
+    -- (very similar to ghci's speed)
+    [mkModuleName "Prelude", mkModuleName "Test.Harness.HaskellDriver"])
 
   liftIO $ putStrLn "HI"
   -- val <- GHC.compileExpr "take 3 Plug.myCoolList"
-  val <- GHC.compileExpr "take 3 myCoolList"
+  val <- GHC.compileExpr "take 3 boringLoopingReady"
   let val2 = unsafeCoerce val :: [Int]
   liftIO $ print val2
   -- val3 <- GHC.compileExpr "take 3 Plug.myCoolList"
@@ -192,14 +200,14 @@ readBinIface' hi_path = do
 
 myCoolDecls :: IO [IfaceDecl]
 myCoolDecls = do
-  miface <- readBinIface' "../dyn/Plug.hi"
+  miface <- readBinIface' "../dyn2/src/Plug2.hi"
   pure $ map snd (mi_decls miface)
 
 myCoolDecl :: IO IfaceDecl
 myCoolDecl = do
-  miface <- readBinIface' "../dyn/Plug.hi"
+  miface <- readBinIface' "../dyn2/src/Plug2.hi"
   let decls = mi_decls miface
-  let [_, _, (_, myCoolIface)] = decls
+  let [_, (_, myCoolIface)] = decls
   pure myCoolIface
 
 declInfo :: IfaceDecl -> IO ()
