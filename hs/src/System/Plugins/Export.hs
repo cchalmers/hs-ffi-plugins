@@ -327,6 +327,16 @@ printBS bsPtr = deRefStablePtr bsPtr >>= print
 foreign export ccall byteStringParts :: StablePtr ByteString -> Ptr (Ptr Word8) -> Ptr Int -> IO Bool
 foreign export ccall printBS :: StablePtr ByteString -> IO ()
 
+-- foreign import ccall "dynamic" ffiNextUnit ::
+--   FunPtr (Ptr () -> Ptr () -> IO Word8)
+--        -> Ptr () -> Ptr () -> IO Word8
+
+-- ffiNext ::
+--   FunPtr (Ptr () -> Ptr a -> IO Word8)
+--        -> Ptr () -> Ptr a -> IO Word8
+-- ffiNext fptr stb a = ffiNextUnit (castFunPtr fptr) stb (castPtr a)
+
+
 -- ghci like interface
 
 -- | Create a new initialised session.
@@ -747,6 +757,7 @@ pp a = GHC.runGhc (Just libdir) $ do
 declInfo :: IfaceDecl -> IO ()
 declInfo = \case
   IfaceId name ty deets inf -> do
+    putStrLn $ "IfaceId"
     putStrLn $ "name: " <> getOccString name
     putStr "ty: " >> pp ty
     -- putStrLn $ showIfaceTy ty
@@ -758,7 +769,36 @@ declInfo = \case
       NoInfo       -> putStrLn "NoInfo"
       HasInfo info -> putStrLn $ "HasInfo " <> show (length info)
     putStrLn ""
-  _ -> putStrLn "Unknown delc"
+  IfaceData name bndrs resKind _cty _roles ctx conDecls isGADT parent -> do
+    putStrLn $ "IfaceData"
+    putStrLn $ "name: " <> getOccString name
+    putStr "ty: " >> pp resKind
+    putStr "binders: " >> pp bndrs
+    putStr "ctx: " >> pp ctx
+    putStr "conDecls: " >> case conDecls of
+      IfAbstractTyCon -> putStrLn "IfAbstractTyCon"
+      IfDataTyCon cons -> putStrLn "IfDataTyCon" >> (forM_ cons $ \con -> do
+        putStr "  name: " >> pp (ifConName con)
+        putStr "  ifConExTvs: " >> pp (ifConExTvs con)
+        putStr "  ifConUserTvBinders: " >> pp (ifConUserTvBinders con)
+        putStr "  ifConEqSpec: " >> pp (ifConEqSpec con)
+        putStr "  ifConCtxt: " >> pp (ifConCtxt con)
+        putStr "  ifConArgTys: " >> pp (ifConArgTys con)
+        putStr "  ifConFields: " >> pp (ifConFields con))
+      IfNewTyCon con -> do
+        putStrLn "IfAbstractTyCon"
+        putStr "  name: " >> pp (ifConName con)
+        putStr "  ifConExTvs: " >> pp (ifConExTvs con)
+        putStr "  ifConUserTvBinders: " >> pp (ifConUserTvBinders con)
+        putStr "  ifConEqSpec: " >> pp (ifConEqSpec con)
+        putStr "  ifConCtxt: " >> pp (ifConCtxt con)
+        putStr "  ifConArgTys: " >> pp (ifConArgTys con)
+        putStr "  ifConFields: " >> pp (ifConFields con)
+    putStr "parent: " >> pp parent
+    putStr "isGADT: " >> pp isGADT
+    putStr "ifaceCons: " >> pp parent
+    putStr ""
+  _ -> putStrLn "unknown decl\n"
 
 read_bin_iface :: CString -> IO (StablePtr ModIface)
 read_bin_iface cstr = peekCString cstr >>= readBinIface' >>= newStablePtr
