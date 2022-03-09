@@ -2,6 +2,7 @@ use callback_rs::dynamic::Typeable;
 use callback_rs::ffi;
 use callback_rs::list::HsList;
 use callback_rs::session;
+use callback_rs::iface;
 use color_eyre::eyre::Result;
 
 use std::path::PathBuf;
@@ -81,6 +82,10 @@ fn main() -> Result<()> {
                         if let Err(err) = session.run_decl(expr) {
                             eprintln!("{}", err);
                         }
+                    }
+                    "iface" => {
+                        let iface = iface::ModIface::read(expr);
+                        iface.pp();
                     }
                     cmd => eprintln!("unknown command '{}'", cmd),
                 }

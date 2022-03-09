@@ -18,6 +18,7 @@ library
   -- other-extensions:
   build-depends:
     base ^>=4.12.0.0,
+    bytestring,
     containers,
     ghc,
     ghc-prim,
@@ -48,6 +49,7 @@ foreign-library plugins-export
   other-modules:       System.Plugins.Export
   build-depends:
     base ^>=4.12.0.0,
+    bytestring,
     containers,
     ghc,
     ghc-prim,

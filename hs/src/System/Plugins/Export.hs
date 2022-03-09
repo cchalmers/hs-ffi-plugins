@@ -12,20 +12,22 @@
 {-# LANGUAGE UnboxedTuples            #-}
 module System.Plugins.Export where
 
+import           Data.ByteString.Internal
+
 import           Control.Concurrent
 import           Control.Exception
-import           Control.Monad          (filterM)
+import           Control.Monad            (filterM, forM_)
 import           Control.Monad.IO.Class
-import qualified Data.Data              as Data
+import qualified Data.Data                as Data
 import           Data.Dynamic
-import           Data.Graph             (flattenSCCs)
+import           Data.Graph               (flattenSCCs)
 import           Data.IORef
-import           Data.Kind              (Type)
-import           Data.Maybe             (fromMaybe)
-import           Data.Typeable          (Proxy (..), typeRepFingerprint)
+import           Data.Kind                (Type)
+import           Data.Maybe               (fromMaybe)
+import           Data.Typeable            (Proxy (..), typeRepFingerprint)
 import           Data.Word
 import           Foreign
-import           Foreign.C              (CString, peekCString)
+import           Foreign.C                (CString, peekCString)
 import           Foreign.C.Types
 import           Foreign.ForeignPtr
 import           Foreign.Marshal.Alloc
@@ -37,30 +39,30 @@ import           System.IO.Unsafe
 import           Type.Reflection
 import           Unsafe.Coerce
 
-import           System.IO              as IO
+import           System.IO                as IO
 
 import qualified BasicTypes
 import           BinIface
-import           DynFlags               (HasDynFlags, defaultDynFlags,
-                                         initDynFlags)
+import           DynFlags                 (HasDynFlags, defaultDynFlags,
+                                           initDynFlags)
 import qualified DynFlags
-import           Exception              (ExceptionMonad, gmask)
+import           Exception                (ExceptionMonad, gmask)
 import qualified GHC
 import           GHC.Exts
-import           GHC.Paths              (libdir)
-import qualified GHC.Types              as Prim
-import qualified GHCi.Message           as GHCi
-import           GhcMonad               (Ghc (..), Session (..))
-import           HscMain                (newHscEnv)
+import           GHC.Paths                (libdir)
+import qualified GHC.Types                as Prim
+import qualified GHCi.Message             as GHCi
+import           GhcMonad                 (Ghc (..), Session (..))
+import           HscMain                  (newHscEnv)
 import           HscTypes
 import           IfaceSyn
 import           Module
-import           Module                 (moduleName, moduleNameString)
+import           Module                   (moduleName, moduleNameString)
 import           Name
-import           Outputable             hiding ((<>))
+import           Outputable               hiding ((<>))
 import qualified Packages
-import           SysTools               (initLlvmConfig, initSysTools)
-import           TcRnMonad              (initTcRnIf)
+import           SysTools                 (initLlvmConfig, initSysTools)
+import           TcRnMonad                (initTcRnIf)
 
 import           Debug.Trace
 
@@ -291,8 +293,41 @@ show_exception ptr = do
   newStablePtr (displayException err)
 foreign export ccall show_exception :: StablePtr SomeException -> IO (StablePtr String)
 
--- ghci like interface
+-- bytes
 
+-- There's a few ways to copy bytes to/from haskell.
+--
+-- The obvious way is for the c-api land to expose a pointer and length. Either this pointer is only
+-- provided for a small amount of time or it's done behind a foreign pointer (with a custom
+-- destructor).
+--
+-- Another way is for ghc to allocate a ByteArray and give it to c-land to fill in. This can avoid
+-- an unnessary copy, and the lifetime issues are handled in c land.
+
+-- foreign export ccall newForeignPtr :: FinalizerPtr Word8 -> Ptr Word8 -> IO (ForeignPtr Word8)
+
+newByteString :: FinalizerEnvPtr () Word8 -> Ptr () -> Ptr Word8 -> Int -> IO (StablePtr ByteString)
+newByteString fin env ptr len = do
+  fptr <- newForeignPtrEnv fin env ptr
+  newStablePtr $! PS fptr 0 len
+
+foreign export ccall newByteString :: FinalizerEnvPtr () Word8 -> Ptr () -> Ptr Word8 -> Int -> IO (StablePtr ByteString)
+
+byteStringParts :: StablePtr ByteString -> Ptr (Ptr Word8) -> Ptr Int -> IO Bool
+byteStringParts bsPtr ptrPtr lenPtr = do
+  bs <- deRefStablePtr bsPtr
+  let (fptr, offset, len) = toForeignPtr bs
+  withForeignPtr fptr (\ptr -> poke ptrPtr (ptr `plusPtr` offset))
+  poke lenPtr len
+  pure True
+
+printBS :: StablePtr ByteString -> IO ()
+printBS bsPtr = deRefStablePtr bsPtr >>= print
+
+foreign export ccall byteStringParts :: StablePtr ByteString -> Ptr (Ptr Word8) -> Ptr Int -> IO Bool
+foreign export ccall printBS :: StablePtr ByteString -> IO ()
+
+-- ghci like interface
 
 -- | Create a new initialised session.
 unsafeNewSession :: Maybe String -> IO Session
@@ -572,10 +607,9 @@ trySuccess act =
 
 ghciHandle :: (HasDynFlags m, ExceptionMonad m) => (SomeException -> m a) -> m a -> m a
 ghciHandle h m = gmask $ \restore -> do
-                 -- Force dflags to avoid leaking the associated HscEnv
-                 dflags <- DynFlags.getDynFlags
-                 dflags `seq` GHC.gcatch (restore (GHC.prettyPrintGhcErrors dflags m)) $ \e -> restore (h e)
-
+  -- Force dflags to avoid leaking the associated HscEnv
+  dflags <- DynFlags.getDynFlags
+  dflags `seq` GHC.gcatch (restore (GHC.prettyPrintGhcErrors dflags m)) $ \e -> restore (h e)
 
 -- | taken from GHCi.UI
 loadModules :: [(FilePath, Maybe GHC.Phase)] -> Ghc Word64
@@ -692,3 +726,53 @@ foreign export ccall debugging :: StablePtr Session -> IO ()
 foreign export ccall load_modules :: StablePtr Session -> Int -> Ptr CString -> IO Word64
 foreign export ccall set_import_paths :: StablePtr Session -> Int -> Ptr CString -> IO ()
 foreign export ccall run_expr_with_type :: StablePtr Session -> StablePtr SomeTypeRep -> CString -> Ptr (StablePtr Any) -> IO Word64
+
+------------------------------------------------------------------------
+-- iface files
+------------------------------------------------------------------------
+
+readBinIface' :: FilePath -> IO ModIface
+readBinIface' hi_path = do
+  mySettings <- initSysTools (Just libdir) -- how should we really set the top dir?
+  llvmConfig <- initLlvmConfig (Just libdir)
+  dflags <- initDynFlags (defaultDynFlags mySettings llvmConfig)
+  e <- newHscEnv dflags
+  initTcRnIf 'r' e undefined undefined (readBinIface IgnoreHiWay QuietBinIFaceReading hi_path)
+
+pp :: Outputable a => a -> IO ()
+pp a = GHC.runGhc (Just libdir) $ do
+  dflags <- DynFlags.getDynFlags
+  liftIO $ putStrLn (showPpr dflags a)
+
+declInfo :: IfaceDecl -> IO ()
+declInfo = \case
+  IfaceId name ty deets inf -> do
+    putStrLn $ "name: " <> getOccString name
+    putStr "ty: " >> pp ty
+    -- putStrLn $ showIfaceTy ty
+    case deets of
+      IfVanillaId                     -> putStrLn "IfVanillaId"
+      IfRecSelId _eitherConDecl _bool -> putStrLn "IfRecSelId"
+      IfDFunId                        -> putStrLn "IfDFunId"
+    case inf of
+      NoInfo       -> putStrLn "NoInfo"
+      HasInfo info -> putStrLn $ "HasInfo " <> show (length info)
+    putStrLn ""
+  _ -> putStrLn "Unknown delc"
+
+read_bin_iface :: CString -> IO (StablePtr ModIface)
+read_bin_iface cstr = peekCString cstr >>= readBinIface' >>= newStablePtr
+
+pp_iface :: StablePtr ModIface -> IO ()
+pp_iface ptr = do
+  iface <- deRefStablePtr ptr
+  forM_ (mi_decls iface) $ \(_, decl) -> do
+    pp decl
+    declInfo decl
+
+foreign export ccall read_bin_iface :: CString -> IO (StablePtr ModIface)
+foreign export ccall pp_iface :: StablePtr ModIface -> IO ()
+
+-- new_session cstr = do
+--   lib >>= unsafeNewSession >>= newStablePtr
+--   where lib = if cstr == nullPtr then pure Nothing else Just <$> (peekCString cstr)

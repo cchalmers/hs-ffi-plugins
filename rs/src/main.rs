@@ -1,5 +1,6 @@
 use callback_rs::ffi;
 use callback_rs::list;
+use callback_rs::bytes;
 
 // fn main() {
 //     unsafe {
@@ -18,31 +19,31 @@ use callback_rs::list;
 // use std::sync::atomic::Ordering;
 // use std::sync::atomic::{AtomicI32, AtomicUsize};
 
-struct HsList {
-    ptr: ffi::HsStablePtr,
-}
+// struct HsList {
+//     ptr: ffi::HsStablePtr,
+// }
 
-impl HsList {
-    fn new() -> HsList {
-        HsList {
-            ptr: unsafe { ffi::mkNewList() },
-        }
-    }
-}
+// impl HsList {
+//     fn new() -> HsList {
+//         HsList {
+//             ptr: unsafe { ffi::mkNewList() },
+//         }
+//     }
+// }
 
-impl Iterator for HsList {
-    type Item = u64;
+// impl Iterator for HsList {
+//     type Item = u64;
 
-    fn next(&mut self) -> Option<u64> {
-        let mut x = 0;
-        let present = unsafe { ffi::nextList64(self.ptr, &mut x as *mut u64 as _) };
-        if present != 0 {
-            Some(x)
-        } else {
-            None
-        }
-    }
-}
+//     fn next(&mut self) -> Option<u64> {
+//         let mut x = 0;
+//         let present = unsafe { ffi::nextList64(self.ptr, &mut x as *mut u64 as _) };
+//         if present != 0 {
+//             Some(x)
+//         } else {
+//             None
+//         }
+//     }
+// }
 
 // struct HsListDF {
 //     ptr: ffi::HsStablePtr,
@@ -75,6 +76,16 @@ fn main() {
         ffi::potatoInit();
         ffi::hello();
     }
+
+    let boxs: Box<str> = Box::from("helooo".to_string());
+    let bs = bytes::HsByteString::new(Box::from(boxs));
+    bs.print();
+    eprintln!("{:?}", bs.as_slice());
+    drop(bs);
+    unsafe { ffi::hs_perform_gc() };
+    std::thread::sleep(std::time::Duration::from_secs(1));
+    unsafe { ffi::hs_perform_gc() };
+    std::thread::sleep(std::time::Duration::from_secs(1));
 
     // let l1 = HsList::new();
     // let mut l2 = HsList::new();

@@ -19,5 +19,8 @@ fn main() {
         .expect("Failed to write bindings!");
 
     println!("cargo:rustc-link-lib=plugins-export");
+    println!("cargo:rustc-link-lib=HSrts-ghc8.6.5");
+    // this is needed if I want to use things like hs_perform_gc
+    println!("cargo:rustc-link-search=/nix/store/vm0pj1wsk434fv5hlds1ndyfa9x4bb7l-ghc-8.6.5/lib/ghc-8.6.5/rts");
     println!("cargo:rerun-if-env-changed=NIX_CFLAGS_COMPILE");
 }
